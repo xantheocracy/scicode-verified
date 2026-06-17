@@ -67,6 +67,23 @@ PYTHONPATH=SciCode/src python3 review/fix_viewer.py 8077   # 端口为位置参�
 
 每题展示原始→清洗的逐字段 / 逐 target diff,旁附:轮次徽章(R1/R2)、性质标签(必要约定 / 输出契约 / 容差放宽 / 数值旋钮 / 疑似泄露…)、改动理由。
 
+## 清洗流程与校验闸门(verify-with-human)
+
+为杜绝「逐题看过/改过、但没真正落进发布产物」这类 desync bug,本项目的清洗按
+`.claude/skills/verify-with-human` 这套纪律执行:**决策即数据 → 只由源组装 → 双向断言 → manifest 绑定消费**。
+
+- **SSOT(唯一事实源)**:`scicode_verified/problems/<id>.json`(题面)+ `scicode_verified/targets/<id>.json`(target)。**只改这里**。
+- **派生物**:`problems_test.jsonl`(由 `tools/assemble.py` 组装)、`test_data_cleaned.h5`(由 `eval_clean/build_clean_h5.py` 重建)。绝不手改。
+- **决策账本**:每条批准的改动记一条 `ledger/<round>.jsonl`:`{id, field, before, after, verdict, reason, round}`。
+
+```bash
+python3 tools/assemble.py                       # SSOT -> jsonl + 刷新 manifest.json
+python3 tools/verify.py --scope prompt --round R3   # 双向闸门,不过则 exit≠0,禁止发布
+```
+
+`verify.py` 强制:**已决必已发**(ledger.after 在 SSOT)、**已变必有据**(任何相对上版的改动都要有 ledger)、**耦合不变**(prompt 轮 targets md5 必须不变)、**语法可解**。
+消费端(`run_deepseek_eval.py`)启动即校验数据 md5 == `manifest.json`,不符**直接报错退出**,杜绝跑到 stale 数据。
+
 ## 已知限制 / 下一轮
 
 - **prompt 改动可能存在过度解释**:目前对题面 prompt 的修改(主问题 prompt 与子步 prompt,**不含 background 及其他字段**)在审查中发现有些改写**透露了过多求解信息**(如推理性的 "so …" 解释句、本应留在 docstring 的公式/指代),即超出「去歧义所必需」的范围。下一轮将逐处复核并收紧,把非必要的解释从 prompt 移回 docstring 或删除,只保留定义输入/输出契约与消除歧义所需的最小信息。

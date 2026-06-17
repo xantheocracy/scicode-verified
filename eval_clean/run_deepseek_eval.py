@@ -41,6 +41,27 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC  = ROOT / "SciCode" / "src"
 H5   = str(ROOT / "scicode_verified" / "test_data_cleaned.h5")   # verified cleaned dataset
 DATA = ROOT / "scicode_verified" / "problems_test.jsonl"
+MANIFEST = ROOT / "scicode_verified" / "manifest.json"
+
+def _check_manifest():
+    """Refuse to run on stale data: assert jsonl/h5 md5 == manifest (verify-with-human
+    invariant 5). Set ALLOW_UNVERIFIED_DATA=1 to bypass (not recommended)."""
+    import hashlib, json as _json
+    if os.environ.get("ALLOW_UNVERIFIED_DATA") == "1":
+        print("WARNING: skipping manifest data check (ALLOW_UNVERIFIED_DATA=1)"); return
+    if not MANIFEST.exists():
+        sys.exit(f"FATAL: {MANIFEST} missing — run tools/assemble.py to generate it.")
+    man = _json.loads(MANIFEST.read_text())
+    def md5f(p):
+        h = hashlib.md5()
+        with open(p, "rb") as f:
+            for c in iter(lambda: f.read(1 << 20), b""): h.update(c)
+        return h.hexdigest()
+    if md5f(DATA) != man.get("problems_test_jsonl_md5"):
+        sys.exit(f"FATAL: {DATA} md5 != manifest — data is stale/edited. Run tools/assemble.py + tools/verify.py.")
+    if man.get("h5_md5") and os.path.exists(H5) and md5f(H5) != man["h5_md5"]:
+        sys.exit(f"FATAL: {H5} md5 != manifest — h5 is stale. Rebuild via eval_clean/build_clean_h5.py.")
+    print(f"manifest OK: dataset {man.get('version')} ({man.get('n_problems')} problems), data md5 verified.")
 # Match the OFFICIAL SciCode harness: WITH background -> multistep_template (background is provided);
 # WITHOUT background -> background_comment_template (the model must first generate the scientific
 # background as a '# Background: ' comment, then code). Selected per-config in build_prompt.
@@ -218,6 +239,7 @@ def main():
     ap.add_argument("--provider", choices=list(PROVIDERS), default="deepseek",
                     help="API endpoint: deepseek (official) or ali (DashScope). Same model+effort, different endpoint.")
     a = ap.parse_args()
+    _check_manifest()   # refuse to run on stale/edited data (verify-with-human invariant 5)
     global MAX_TOKENS, VERBOSE_STEPS, PROVIDER, BASE_URL, KEY_ENV
     MAX_TOKENS = a.max_tokens
     VERBOSE_STEPS = a.verbose_steps

@@ -1,0 +1,72 @@
+{
+ "problem_name": "helium_atom_vmc",
+ "problem_id": "46",
+ "problem_description_main": "Write a Python script to calculate the ground-state energy of the helium atom using variational Monte Carlo. The wave function is given by $\\exp(-\\alpha r_1) \\exp(-\\alpha r_2)$",
+ "problem_background_main": "",
+ "problem_io": "'''\nInput:\n    `configs` always has shape (nconf, nelec, ndim) where nconf is the number of configurations, nelec is the number of electrons (2 for helium), ndim is the number of spatial dimensions (usually 3)\n\nOutput:\n    energy (list of float): kinetic energy, electron-ion potential, and electron-electron potential\n    error (list of float): error bars of kinetic energy, electron-ion potential, and electron-electron potential\n'''",
+ "required_dependencies": "import numpy as np",
+ "sub_steps": [
+  {
+   "step_number": "46.1",
+   "step_description_prompt": "Write a Python class to implement a Slater wave function. The class contains functions to evaluate the unnormalized wave function psi, (gradient psi) / psi, (laplacian psi) / psi, and kinetic energy. Each function takes `configs` of shape `(nconfig, nelectrons, ndimensions)` as an input where: conf is the number of configurations, nelec is the number of electrons (2 for helium), ndim is the number of spatial dimensions (usually 3). The Slater wave function is given by $\\exp(-\\alpha r_1) \\exp(-\\alpha r_2)$.",
+   "step_background": "Background\n\nSlater\n\nDefine a simple wave function with exponential orbitals and no Jastrow factor.\n\n**Value**\n\n\\begin{align}\n\\psi(r_1, r_2) &= \\exp(-\\alpha r_1) \\exp(-\\alpha r_2).\n\\end{align}\n\n**Gradient**\n\n\\begin{align}\n\\frac{\\nabla \\psi}{\\psi} &= -\\alpha \\left[\\frac{\\mathbf{r}_1 }{r_1}, \\frac{\\mathbf{r}_2}{r_2} \\right]\n\\end{align}\n\n**Laplacian**\n\n\\begin{align}\n\\frac{\\nabla^2 \\psi}{\\psi} &= \\left[-\\frac{2 \\alpha}{r_1} + \\alpha^2, -\\frac{2 \\alpha}{r_2} + \\alpha^2\\right]\n\\end{align}",
+   "ground_truth_code": null,
+   "function_header": "class Slater:\n    def __init__(self, alpha):\n        '''Args: \n            alpha: exponential decay factor\n        '''\n    def value(self, configs):\n        '''Calculate unnormalized psi\n        Args:\n            configs (np.array): electron coordinates of shape (nconf, nelec, ndim)\n        Returns:\n            val (np.array): (nconf,)\n        '''\n    def gradient(self, configs):\n        '''Calculate (gradient psi) / psi\n        Args:\n            configs (np.array): electron coordinates of shape (nconf, nelec, ndim)\n        Returns:\n            grad (np.array): (nconf, nelec, ndim)\n        '''\n    def laplacian(self, configs):\n        '''Calculate (laplacian psi) / psi\n        Args:\n            configs (np.array): electron coordinates of shape (nconf, nelec, ndim)\n        Returns:\n            lap (np.array): (nconf, nelec)\n        '''\n    def kinetic(self, configs):\n        '''Calculate the kinetic energy\n        Args:\n            configs (np.array): electron coordinates of shape (nconf, nelec, ndim)\n        Returns:\n            kin (np.array): (nconf,)\n        '''",
+   "test_cases": [
+    "from scicode.compare.cmp import cmp_tuple_or_list\nconfigs = np.array([[[ 0.76103773,  0.12167502,  0.44386323], [ 0.33367433,  1.49407907, -0.20515826]]])\nwf = Slater(alpha=0.5)\nassert cmp_tuple_or_list((wf.value(configs), wf.gradient(configs), wf.laplacian(configs), wf.kinetic(configs)), target)",
+    "from scicode.compare.cmp import cmp_tuple_or_list\nconfigs = np.array([[[ 0.76103773,  0.12167502,  0.44386323], [ 0.33367433,  1.49407907, -0.20515826]]])\nwf = Slater(alpha=1)\nassert cmp_tuple_or_list((wf.value(configs), wf.gradient(configs), wf.laplacian(configs), wf.kinetic(configs)), target)",
+    "from scicode.compare.cmp import cmp_tuple_or_list\nconfigs = np.array([[[ 0.76103773,  0.12167502,  0.44386323], [ 0.33367433,  1.49407907, -0.20515826]]])\nwf = Slater(alpha=2)\nassert cmp_tuple_or_list((wf.value(configs), wf.gradient(configs), wf.laplacian(configs), wf.kinetic(configs)), target)"
+   ],
+   "return_line": "        return kin"
+  },
+  {
+   "step_number": "46.2",
+   "step_description_prompt": "Write a Python class for Hamiltonian to evaluate electron-electron and electron-ion potentials of a helium atom from the given `configs`, which has shape (nconf, nelec, ndim) where nconf is the number of configurations, nelec is the number of electrons (2 for helium), ndim is the number of spatial dimensions (usually 3)",
+   "step_background": "Background\n\nThe Hamiltonian is given by\n\n\\begin{align}\nH &= -\\frac{1}{2} \\nabla_{1}^2 - \\frac{1}{2} \\nabla_{2}^2 - \\frac{2}{r_1} - \\frac{2}{r_2} + \\frac{1}{r_{12}}.\n\\end{align}",
+   "ground_truth_code": null,
+   "function_header": "class Hamiltonian:\n    def __init__(self, Z):\n        '''Z: atomic number\n        '''\n    def potential_electron_ion(self, configs):\n        '''Calculate electron-ion potential\n        Args:\n            configs (np.array): electron coordinates of shape (nconf, nelec, ndim)\n        Returns:\n            v_ei (np.array): (nconf,)\n        '''\n    def potential_electron_electron(self, configs):\n        '''Args:\n            configs (np.array): electron coordinates of shape (nconf, nelec, ndim)\n        Returns:\n            v_ee (np.array): (nconf,)\n        '''\n    def potential(self, configs):\n        '''Total potential energy\n        Args:\n            configs (np.array): electron coordinates of shape (nconf, nelec, ndim)\n        Returns:\n            v (np.array): (nconf,)        \n        '''",
+   "test_cases": [
+    "np.random.seed(0)\nconfigs = np.random.normal(size=(1, 2, 3))\nhamiltonian = Hamiltonian(Z=2)\nassert np.allclose((hamiltonian.potential_electron_ion(configs), hamiltonian.potential_electron_electron(configs), \n                    hamiltonian.potential(configs)), target)",
+    "np.random.seed(0)\nconfigs = np.random.normal(size=(2, 2, 3))\nhamiltonian = Hamiltonian(Z=3)\nassert np.allclose((hamiltonian.potential_electron_ion(configs), hamiltonian.potential_electron_electron(configs), \n                    hamiltonian.potential(configs)), target)",
+    "np.random.seed(0)\nconfigs = np.random.normal(size=(3, 2, 3))\nhamiltonian = Hamiltonian(Z=4)\nassert np.allclose((hamiltonian.potential_electron_ion(configs), hamiltonian.potential_electron_electron(configs), \n                    hamiltonian.potential(configs)), target)"
+   ],
+   "return_line": "        return v"
+  },
+  {
+   "step_number": "46.3",
+   "step_description_prompt": "Write a Python function that performs Metropolis algorithms given the electron positions `configs` and a WaveFunction object `wf`, using timestep `tau` and number of steps `nsteps`",
+   "step_background": "Background\n\nGiven the current position $\\mathbf{r} = \\{\\mathbf{r}_1, \\mathbf{r}_2\\}$, propose a new move \n\n\\begin{align}\n\\mathbf{r}^{\\prime} &= \\mathbf{r} + \\sqrt{\\tau} \\chi,\n\\end{align}\n\nwhere $\\chi$ is a random number from the standard normal distribution.\n\nAccept the proposed move with the acceptance probability\n\n\\begin{align}\na &= \\frac{|\\psi(\\mathbf{r}^{\\prime})|^2}{|\\psi(\\mathbf{r})|^2}.\n\\end{align}\n\nFor reproducibility, implement each Metropolis step exactly as follows, using all-electron moves and the legacy global NumPy RNG in this draw order: draw `chi = np.random.normal(size=configs.shape)`; propose `posnew = poscur + np.sqrt(tau)*chi`; compute the acceptance ratio `a = wf.value(posnew)**2 / wf.value(poscur)**2`; draw `u = np.random.random(nconf)`; accept the configurations where `a + u > 1.0` (this is the same accept-where-`u < a` rule since `1 - u` is also uniform on [0, 1)), updating both the accepted positions and their stored wave-function values.",
+   "ground_truth_code": null,
+   "function_header": "def metropolis(configs, wf, tau, nsteps):\n    '''Runs metropolis sampling\n    Args:\n        configs (np.array): electron coordinates of shape (nconf, nelec, ndim)\n        wf (wavefunction object): Slater class defined before\n        tau (float): Metropolis timestep (proposal scale is sqrt(tau))\n        nsteps (int): number of Metropolis steps\n    Returns:\n        poscur (np.array): final electron coordinates after metropolis. Shape (nconf, nelec, ndim)\n    '''",
+   "test_cases": [
+    "wf = Slater(alpha=1)\nnp.random.seed(0)\nassert np.allclose(metropolis(np.random.normal(size=(1, 2, 3)), wf, tau=0.01, nsteps=2000), target)",
+    "wf = Slater(alpha=1)\nnp.random.seed(0)\nassert np.allclose(metropolis(np.random.normal(size=(2, 2, 3)), wf, tau=0.01, nsteps=2000), target)",
+    "wf = Slater(alpha=1)\nnp.random.seed(0)\nassert np.allclose(metropolis(np.random.normal(size=(3, 2, 3)), wf, tau=0.01, nsteps=2000), target)"
+   ],
+   "return_line": "    return poscur"
+  },
+  {
+   "step_number": "46.4",
+   "step_description_prompt": "Calculate the kinetic energy, electron-ion potential energy, and electron-electron potential energy and their error bars, using `metropolis` defined in the previous step. Run `metropolis` once and evaluate all three local energies ONLY on the final configurations it returns (do not average over the Metropolis chain). Report each energy as the mean over the returned configurations and each error bar as the standard error of the mean, `np.std(values)/np.sqrt(nconf)` using the population standard deviation (ddof=0). Inputs are configs of shape `(nconf, nelec, ndim)` where: nconf is the number of configurations, nelec is the number of electrons (2 for helium), ndim is the number of spatial dimensions (usually 3), number of Metropolis steps `nsteps`, step size `tau`, exponential decay factor for the wavefunction `alpha`, and atomic number `Z` (always 2 for Helium).",
+   "step_background": "",
+   "ground_truth_code": null,
+   "function_header": "def calc_energy(configs, nsteps, tau, alpha, Z):\n    '''Args:\n        configs (np.array): electron coordinates of shape (nconf, nelec, ndim) where nconf is the number of configurations, nelec is the number of electrons (2 for helium), ndim is the number of spatial dimensions (usually 3)\n        nsteps (int): number of Metropolis steps\n        tau (float): step size\n        alpha (float): exponential decay factor for the wave function\n        Z (int): atomic number\n    Returns:\n        energy (list of float): kinetic energy, electron-ion potential, and electron-electron potential\n        error (list of float): error bars of kinetic energy, electron-ion potential, and electron-electron potential, each computed as the standard error of the mean over the returned configurations: np.std(values)/np.sqrt(nconf) using the population standard deviation (ddof=0)\n    '''",
+   "test_cases": [
+    "from scicode.compare.cmp import cmp_tuple_or_list\nnp.random.seed(0)\nassert cmp_tuple_or_list(calc_energy(np.random.randn(1000, 2, 3), nsteps=1000, tau=0.2, alpha=1, Z=2), target)",
+    "from scicode.compare.cmp import cmp_tuple_or_list\nnp.random.seed(0)\nassert cmp_tuple_or_list(calc_energy(np.random.randn(1000, 2, 3), nsteps=1000, tau=0.2, alpha=2, Z=2), target)",
+    "from scicode.compare.cmp import cmp_tuple_or_list\nnp.random.seed(0)\nassert cmp_tuple_or_list(calc_energy(np.random.randn(1000, 2, 3), nsteps=1000, tau=0.2, alpha=3, Z=2), target)",
+    "np.random.seed(0)\nenergy, error = calc_energy(np.random.randn(1000, 2, 3), nsteps=10000, tau=0.05, alpha=1, Z=2)\nassert (energy[0]-error[0] < 1 and energy[0]+error[0] > 1, energy[1]-error[1] < -4 and energy[1]+error[1] > -4) == target",
+    "np.random.seed(0)\nenergy, error = calc_energy(np.random.randn(1000, 2, 3), nsteps=10000, tau=0.05, alpha=2, Z=2)\nassert (energy[0]-error[0] < 4 and energy[0]+error[0] > 4, energy[1]-error[1] < -8 and energy[1]+error[1] > -8) == target"
+   ],
+   "return_line": "    return energy, error"
+  }
+ ],
+ "general_solution": null,
+ "general_tests": [
+  "from scicode.compare.cmp import cmp_tuple_or_list\nnp.random.seed(0)\nassert cmp_tuple_or_list(calc_energy(np.random.randn(1000, 2, 3), nsteps=1000, tau=0.2, alpha=1, Z=2), target)",
+  "from scicode.compare.cmp import cmp_tuple_or_list\nnp.random.seed(0)\nassert cmp_tuple_or_list(calc_energy(np.random.randn(1000, 2, 3), nsteps=1000, tau=0.2, alpha=2, Z=2), target)",
+  "from scicode.compare.cmp import cmp_tuple_or_list\nnp.random.seed(0)\nassert cmp_tuple_or_list(calc_energy(np.random.randn(1000, 2, 3), nsteps=1000, tau=0.2, alpha=3, Z=2), target)",
+  "np.random.seed(0)\nenergy, error = calc_energy(np.random.randn(1000, 2, 3), nsteps=10000, tau=0.05, alpha=1, Z=2)\nassert (energy[0]-error[0] < 1 and energy[0]+error[0] > 1, energy[1]-error[1] < -4 and energy[1]+error[1] > -4) == target",
+  "np.random.seed(0)\nenergy, error = calc_energy(np.random.randn(1000, 2, 3), nsteps=10000, tau=0.05, alpha=2, Z=2)\nassert (energy[0]-error[0] < 4 and energy[0]+error[0] > 4, energy[1]-error[1] < -8 and energy[1]+error[1] > -8) == target"
+ ]
+}
