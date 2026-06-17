@@ -1,0 +1,28 @@
+{
+  "problem_id": "39",
+  "split": "test",
+  "reviewer_model": "fable",
+  "steps_reviewed": 3,
+  "steps": [
+    {"step_number": "39.1", "static_ok": false,
+     "dynamic_status": "pass",
+     "notes": "Docstring-following 2x2-matrix return passes all 3 tests; description-following tuple return hard-fails (broadcast ValueError). See D10 finding."},
+    {"step_number": "39.2", "static_ok": false,
+     "dynamic_status": "pass",
+     "notes": "Passes ONLY with the unstated recipe theta = pi + 1j*arccosh(|(A+D)/2|) gated on |(A+D)/2|>1; every literal reading of the prompt fails tests 0 and/or 1. See D4 finding."},
+    {"step_number": "39.3", "static_ok": true,
+     "dynamic_status": "pass",
+     "notes": "Robust: passes with gold-guess theta AND with plain principal np.arccos + plain complex sin (no sinh branch). Targets verified against physics; bool test 0 is weak alone but tests 1-3 constrain values."}
+  ],
+  "findings": [
+    {"step_number": "39.1", "defect_type": "D10", "severity": "major",
+     "confidence": "high",
+     "evidence": "step_description_prompt: 'The output should be a tuple of the matrix element (A,B,C,D).' vs function_header docstring: 'Output: matrix (2 by 2 numpy array containing 4 complex numbers)' and return_line 'return matrix'. The frozen h5 target is shape (2,2) complex128 ([[A,B],[C,D]]). A solver following the description's explicit tuple instruction fails ALL 3 tests with a crash, not a numeric miss: steptest on review/work/39/impl_tuple_return.py -> 'ValueError: operands could not be broadcast together with shapes (4,) (2,2)' (RESULT step 39.1: FAIL). The 2x2-array reading (review/work/39/impl_gold_guess.py) passes 3/3.",
+     "suggested_fix": "Delete/replace the description sentence with 'The output should be the 2x2 propagate matrix M = [[A,B],[C,D]] as a numpy array', matching the docstring and target."},
+    {"step_number": "39.2", "defect_type": "D4", "severity": "major",
+     "confidence": "high",
+     "evidence": "Targets are reproducible ONLY by the unstated recipe: x=(A+D)/2; if abs(x)>1: theta = pi + 1j*arccosh(abs(x)); else theta = np.arccos(x). Probe (review/work/39/probe_theta.py) over all plausible literal readings: (a) prompt's own procedure 'keep the real part of theta as np.pi' applied to np.arccos fails even REAL-trace test 0, because np.arccos(1.5+0j) = -0.9624j (numpy principal branch has negative imag) so clamping gives pi-0.9624j vs target pi+0.9624j; (b) the prompt's literal condition '(A + D) / 2 is greater than 1' is un-evaluable for the complex traces the tests feed (complex>1 raises TypeError) and contradicts the background's '|(A+D)/2|>1'; conditioning on Re(x)>1 fails tests 0,1; (c) alpha=arccosh(-x) (the exact solution of cos(pi+i*alpha)=x for x<-1) fails tests 0,1. Moreover the test-1 target pi+0.4812118j for inputs (A=1, D=2j) does not satisfy the background's defining equation at all: cos(pi+0.4812j) = -1.1180, but (A+D)/2 = 0.5+1j; 0.4812118 = arccosh(|0.5+1j|). Tests also feed non-conjugate (A,D) pairs although step 39.1 guarantees D=conj(A) (real trace), i.e. out-of-contract inputs where the background math defines no theta. Only review/work/39/impl_gold_guess.py passes 3/3; the natural alternative impl (review/work/39/impl_v2_plain_sin.py, plain np.arccos) fails test 0 (AssertionError).",
+     "suggested_fix": "State the recipe explicitly in the prompt/docstring: 'Let x=(A+D)/2. If |x|>1, return theta = pi + 1j*arccosh(|x|); otherwise return theta = arccos(x) (numpy principal branch).' Alternatively restrict test inputs to physical conjugate pairs (real trace) and fix the sign convention of the imaginary part."}
+  ],
+  "overall_assessment": "Steps are well-posed physically (DBR transfer-matrix formulas in the backgrounds are correct and the 39.1/39.3 targets verify against them), and 39.3 is robust to theta-branch and sin/sinh choices. But 39.1 contains an explicit return-type contradiction (tuple vs 2x2 array) where the wrong-but-instructed choice crashes the test, and 39.2 is passable only by guessing an unstated alpha=arccosh(|trace/2|) heuristic that the frozen targets encode even where it contradicts the background's defining equation cos(theta)=(A+D)/2 -- every literal reading of the 39.2 prompt fails at least one test. As-is, 39.2 in particular will fail many competent solvers."
+}

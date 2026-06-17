@@ -1,0 +1,28 @@
+{
+  "problem_id": "48",
+  "split": "test",
+  "reviewer_model": "fable",
+  "steps_reviewed": 4,
+  "steps": [
+    {"step_number": "48.1", "static_ok": true, "dynamic_status": "pass",
+     "notes": "Literal-reading impl (k=sqrt(2mE)/hbar with hbar_c=hc/2pi, nm->Angstrom /10; k_i_z=+k_i sin(th), k_s_z=-k_s sin(gamma-th), q=k_s^x-k_i^x per Q=k_s-k_i) passes all 3 tests joint+isolate. Stated sign conventions fully disambiguate geometry; sign-flip variants fail, so targets match the stated conventions."},
+    {"step_number": "48.2", "static_ok": true, "dynamic_status": "pass",
+     "notes": "V_eff = 1/(q^2+(k_i_z+k_s_z)^2) with SIGNED k_s_z from 48.1 (kappa = deviation from specular, physically correct near-specular divergence, V_eff~2729 at th=35.14) passes 3/3. Unsigned-magnitude kappa fails, but prompt+48.1 sign statements pin the signed reading. Docstring unit label 'inverse of square angstrom' is dimensionally backwards (see finding)."},
+    {"step_number": "48.3", "static_ok": true, "dynamic_status": "pass",
+     "notes": "S = I/V_eff^2 (sigma_0=1) passes 3/3 joint+isolate. Tests use np.random.seed(2024) before randint -> fully deterministic (legacy RandomState, version-stable). Targets non-degenerate; smallest element 3.6e-7 still above atol."},
+    {"step_number": "48.4", "static_ok": true, "dynamic_status": "pass",
+     "notes": "chi = pi*(S(w) - S_interp(-w)) with scipy interp1d LINEAR, fill_value=0 passes 4/4 joint+isolate. Targets encode -chi'' (positive for w>0) and LINEAR interpolation specifically (cubic/quadratic/nearest fail; max diffs 5e-5..1.4e2). Test 4 is a boolean monotonicity check (target True)."}
+  ],
+  "findings": [
+    {"step_number": "48.4", "defect_type": "D10", "severity": "minor", "confidence": "high",
+     "evidence": "Three reachable spec sources disagree on the output's sign. Main problem IO: \"chi: an 1D array of imaginary part of the density response function\". Step 48.4 description: \"Antisymmetrize S(omega) to obtain chi''(omega)\". But the docstring says \"Output chi: negative of the imaginary part of the density response function\", and the background gives -chi''(omega) = pi[S(omega) - S(-omega)]. The frozen targets encode -chi'' (e.g. 48.4 test 0 target [..., 3.88e-4, ..., 1.38e-1] all positive for omega>0; test 4 asserts (chi[omega>0.1]>0).all() == True). A sign-flipped implementation returning chi'' literally (chi = -pi*(S - S(-omega)), per the main IO / step-description wording) FAILS official joint scoring (verified: review/work/48/impl_chi_sign_flip.py -> AssertionError on 48.4). The docstring (operative contract, immediately above the return) plus the explicit background formula disambiguate, so a careful solver passes, but the description-level text says the opposite of what is scored.",
+     "suggested_fix": "Make the wording uniform: in problem_io and the step-4 description, change 'imaginary part of the density response function' to 'negative of the imaginary part of the density response function (-chi'')', matching the docstring and target."},
+    {"step_number": "48.4", "defect_type": "D4", "severity": "minor", "confidence": "medium",
+     "evidence": "The prompt requires evaluating S(-omega) on a grid where -omega is generally not a grid point (omega = linspace(-0.2, 2.0, 10)) and says only \"set a fill value of 0 for S(omega) for energies fall outside the given range\" — the interpolation SCHEME is never stated. The frozen targets encode linear interpolation exactly (my linear interp1d impl matches to maxabsdiff 2e-12); plausible alternatives fail np.allclose decisively: kind='cubic' maxabsdiff up to 95.1 (test 2, target scale ~1.5e3), 'quadratic' up to 56.1, 'nearest' up to 143. Mitigation: linear is the canonical default (scipy interp1d default kind, np.interp), the dependency block imports scipy.interpolate, and 'fill value' maps directly onto interp1d's fill_value argument, so the default-choice implementation passes — hence minor rather than major.",
+     "suggested_fix": "Add 'use linear interpolation' to the step-4 description/docstring (e.g. 'linearly interpolate S at -omega, with fill value 0 outside the measured range')."},
+    {"step_number": "48.2", "defect_type": "D10", "severity": "minor", "confidence": "high",
+     "evidence": "Docstring: \"V_eff: matrix element in the unit of the inverse of square angstrom\". With the docstring's own normalization \"assume 4\\pi*e^2 = 1\" and q, kappa in inverse angstrom (48.1 output unit), V_eff = 1/(q^2+kappa^2) has units of angstrom SQUARED, not inverse-square-angstrom. The stated unit label is dimensionally inverted. No score impact: the formula and inputs uniquely determine the number regardless of the label (verified pass), but the label is wrong as documentation.",
+     "suggested_fix": "Change the docstring unit to 'square angstrom' (or state V_eff is reported in units of 4*pi*e^2*angstrom^2)."}
+  ],
+  "overall_assessment": "Problem 48 is fair to score as-is. All four steps pass with a literal reading of the prompts (joint = official mode and isolate), signatures match all test calls, tests are seeded/deterministic, targets are non-degenerate and convention-consistent with the explicitly stated geometry (signed k_s_z, Q = k_s - k_i, kappa = k_i^z + k_s^z giving the physically correct near-specular divergence). The only real risks are documentation-level: the chi-sign wording contradiction (docstring is correct, description text is not) and the unstated-but-default linear interpolation in 48.4."
+}

@@ -1,0 +1,10 @@
+{
+ "problem_id": "18",
+ "note": "18.2 test0 \u539f w=[0] \u975e\u6cd5(\u9700 n_1*n_2=28 \u4e2a\u6743\u91cd,\u53ea\u7ed91\u4e2a\u4e14\u4e3a0\u2192\u6b63\u786e\u6709\u7406\u5b9e\u73b0 IndexError/\u9664\u96f6);\u539f\u51bb\u7ed3 target \u662f shape-(2,) \u7684 [0.5,1.0](buggy \u5b9e\u73b0\u62fc\u51fa\u7684 [N_2(1),M_1(0)] \u5047\u8c61)\u3002\u6362\u5408\u6cd5\u975e\u5747\u5300 28-\u6743\u91cd w_{a,b}=1+0.1a+0.3b(row-major),\u6b63\u786e\u6807\u91cf target=0.48387096774193544(=15/31);plain \u5f20\u91cf\u79ef=0.5 \u2192 \u73b0\u5728 ignore-weights \u4f5c\u5f0a\u4f1a\u6302\u3002**h5 \u5f62\u72b6\u4ece (2,) \u53d8\u6807\u91cf,\u9700\u66ff\u6362 dataset\u3002** row-major \u7ea6\u5b9a\u7531 docstring \u65b0\u589e\u53e5\u9489\u5b9a(\u539f uniform-weight \u6d4b\u8bd5\u65e0\u6cd5\u533a\u5206 row/col-major,gold withheld)\u3002\u72ec\u7acb\u590d\u73b0(\u81ea\u5199\u5b9e\u73b0)\u786e\u8ba4:row=0.48387096774193544,col-major=0.4595(\u5f02),partition-of-unity=1.0\u3002",
+ "18.2": {
+  "0": 0.48387096774193544
+ },
+ "_rounds": [
+  "r1"
+ ]
+}

@@ -1,0 +1,24 @@
+{
+  "problem_id": "29",
+  "split": "dev",
+  "reviewer_model": "fable",
+  "steps_reviewed": 3,
+  "steps": [
+    {"step_number": "29.1", "static_ok": false,
+     "dynamic_status": "pass",
+     "notes": "Gold and idiomatic impl (v/np.linalg.norm(v)) pass, but tests 2-3 feed out-of-contract multi-dim inputs; see finding."},
+    {"step_number": "29.2", "static_ok": true,
+     "dynamic_status": "pass",
+     "notes": "Targets 24/25/86 hand-verified correct dot products; gold and own impl pass; tests adequately constraining."},
+    {"step_number": "29.3", "static_ok": true,
+     "dynamic_status": "pass",
+     "notes": "All test matrices nonsingular (dets -2,-1,10); column-vector convention pinned by 'N x 1 vectors' wording (rows-GS fails, cols-GS/MGS passes); test 0 boolean target redundant-weak but tests 1-3 fully pin the output."}
+  ],
+  "findings": [
+    {"step_number": "29.1", "defect_type": "D4", "severity": "major",
+     "confidence": "high",
+     "evidence": "Step prompt: 'Provide a fucntion that normalizes the input vector. The input should be a numpy array and the output should be a numpy array with the same shape.' Docstring: 'v (N*1 numpy array): The input vector.' Background gives the vector L2 formula ||v||_2 = sqrt(v1^2+...+vN^2). But test 2 feeds v = np.array([1..8]).reshape(4,2) and test 3 feeds a 3x2x2 tensor -- inputs outside the documented N*1 vector domain (also a D10 contradiction: step prompt says generic 'numpy array', docstring says N*1). The h5 targets encode the global flattened-L2 (Frobenius) normalization v/np.linalg.norm(v), which is never stated. Demonstrated official failures of correct-for-the-documented-domain implementations: (a) v/np.sqrt(np.dot(v,v)) -> 'ValueError: shapes (4,2) and (4,2) not aligned' -> RESULT step 29.1: FAIL; (b) v/np.linalg.norm(v, 2) (literal 'L2 norm') -> spectral norm on the 4x2 input, AssertionError -> RESULT step 29.1: FAIL (and ValueError 'Improper number of dimensions to norm' on the 3D input). Per-column normalization (axis=0) also fails. Only the idiomatic default np.linalg.norm(v) / sqrt(sum(v**2)) generalization passes; a solver cannot know multi-dim inputs will be tested.",
+     "suggested_fix": "Either restrict test cases 2-3 to 1-D vectors (matching the docstring), or amend the docstring/prompt to: 'v (numpy array of any shape): normalized by the L2 norm of all its elements (i.e., the flattened vector / Frobenius norm), output has the same shape.'"}
+  ],
+  "overall_assessment": "Steps 29.2 and 29.3 are clean: targets hand-verified, the column-vector convention in 29.3 is adequately pinned by the 'N x 1 vectors' wording and confirmed against the target, all input matrices are nonsingular, and an independent MGS implementation passes. Step 29.1 has one genuine defect: its tests feed 2-D and 3-D arrays into a function specified as normalizing an N*1 vector, silently requiring the flattened/Frobenius-norm generalization; reasonable literal implementations of the stated contract (dot-product norm, ord=2 norm) officially fail. With the 29.1 test inputs fixed or the docstring generalized, the problem is fair to score."
+}

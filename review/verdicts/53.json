@@ -1,0 +1,29 @@
+{
+  "problem_id": "53",
+  "verifier_model": "fable",
+  "n_confirmed": 3,
+  "n_refuted": 0,
+  "n_uncertain": 0,
+  "verdicts": [
+    {"step_number": "53.1", "defect_type": "D10",
+     "verdict": "confirmed",
+     "tier": "A",
+     "revised_severity": "major",
+     "fix_kind": "prompt_edit",
+     "one_liner": "Quotes accurate; written PDF f=(1/a)exp(-Dt/a) has mean a (scale=a in numpy) but Gillespie/target need mean 1/a (scale=1/a); target reproduces exactly as std_exp/A=0.0004090657. Formula contradicts the 'rate=sum propensities' prose."},
+    {"step_number": "53.2", "defect_type": "D4",
+     "verdict": "confirmed",
+     "tier": "B",
+     "revised_severity": "major",
+     "fix_kind": "prompt_edit",
+     "one_liner": "Contract is silent on whether the event crossing T is recorded; target excludes it (n=3467, last_t<T), so a naive while-t<T loop records one extra row -> hard allclose shape failure. Genuine ambiguity."},
+    {"step_number": "53.3", "defect_type": "D10",
+     "verdict": "confirmed",
+     "tier": "A",
+     "revised_severity": "minor",
+     "fix_kind": "prompt_edit",
+     "one_liner": "'rounded up to one decimal point' is round-to-nearest in targets (0.6283->0.6, not ceil's 0.7); literal ceil reading fails 53.3/53.4. Real but minor wording defect."}
+  ],
+  "missed_defects": [],
+  "summary": "All three findings confirmed: two D10 wording/formula contradictions (exponential PDF scale and 'rounded up' meaning round-to-nearest) and one D4 unspecified T-recording boundary. The exponential-scale defect (53.1) is the most serious and was independently reproduced (target = std_exp/A exactly); fixing the three wording points makes the problem fully fair."
+}

@@ -1,0 +1,47 @@
+{
+  "problem_name": "linear_tetrahedron_method",
+  "problem_id": "17",
+  "problem_description_main": "Implement a density of states (DOS) integration using the linear tetrahedron method. The Brillouin zone is divided into sub-meshes, with each sub-mesh further subdivided into multiple tetrahedrons. For simplicity, consider just one tetrahedron. The DOS integration is performed on an energy iso-value surface inside the tetrahedron. Assume the energy values are linearly interpolated within the tetrahedron based on the values at its four vertices. Use Barycentric coordinate transformation to express the energy. Note that the integration expression varies depending on the relative magnitudes of the energy on the iso-value surface and the energies at the vertices.",
+  "problem_background_main": "",
+  "problem_io": "'''\nInput:\nenergy: a float number representing the energy value at which the density of states will be integrated\nenergy_vertices: a list of float numbers representing the energy values at the four vertices of a tetrahedron when implementing the linear tetrahedron method\n\nOutput:\nresult: a float number representing the integration results of the density of states\n'''",
+  "required_dependencies": "import sympy as sp\nimport numpy as np",
+  "sub_steps": [
+    {
+      "step_number": "17.1",
+      "step_description_prompt": "Assume the energy on the iso-value surface is $\\varepsilon_0 = E$ and the energies at the tetrahedron vertices are $\\varepsilon_i$, with $\\varepsilon_1 < \\varepsilon_2 < \\varepsilon_3 < \\varepsilon_4$. Define the energy differences $\\varepsilon_{ji} = \\varepsilon_j - \\varepsilon_i$. Write a function that initializes a 5x5 array $\\{\\varepsilon_{ji}\\}, (i,j = 0,...,4)$, and creates sympy representations and corresponding variables for $\\{\\varepsilon_{ji}\\}$.",
+      "step_background": "Background\nGenerally, the integration of a quantity over the Brillouin zone can be expressed as the integral:\n\\begin{equation}\n    \\frac{1}{\\Omega_{BZ}}\\int_{BZ} \\,M_{\\mathbf{k}}\\cdot\n    f(\\varepsilon_\\mathbf{k})\\,\\mathrm{d}\\mathbf{k}\n\\end{equation}\nwhere $M_{\\mathbf{k}}$ is the matrix element and $f(\\varepsilon_\\mathbf{k})$ is Heaviside step function $\\Theta(E - \\varepsilon_\\mathbf{k})$ or Dirac function $\\delta(E - \\varepsilon_\\mathbf{k})$.\n\nCoordinate definition\nIn the linear tetrahedron method, the quantities, $M_\\mathrm{k}$ and $\\varepsilon_\\mathbf{k}$, are linearly interpolated within the tetrahedron, i.e.\n\\begin{equation}\n\\varepsilon(x, y, z) = a + b\\cdot x + c\\cdot y + d\\cdot z\n\\end{equation}\nwhere x, y, z are the three component of $\\mathbf{k}$. With the values at the four vertices, e.g. $\\varepsilon_i (i=1,...,4)$, the coeffiecients a, b, c and d can be readily obtained. One can also use the Barycentric coordinates of the tetrahedron and express the quantity as\n\\begin{equation}\n\\varepsilon(e, u, v) =\n\\varepsilon_1\\cdot(1 - e - u - v)\n+ \\varepsilon_2 \\cdot e\n+ \\varepsilon_3 \\cdot u\n+ \\varepsilon_4 \\cdot v\n\\end{equation}\n\nwhere\n\\begin{align}\nx &= x_1\\cdot(1 - e - u - v) + x_2 \\cdot e + x_3 \\cdot u + x_4 \\cdot v \\\\\ny &= y_1\\cdot(1 - e - u - v) + y_2 \\cdot e + y_3 \\cdot u + y_4 \\cdot v \\\\\nz &= z_1\\cdot(1 - e - u - v) + z_2 \\cdot e + z_3 \\cdot u + z_4 \\cdot v \\\\\n\\end{align}\n\nand $e, u, v \\in [0, 1]$.\n\nNow the contribution within the tetrahedron to the BZ integration becomes\n\\begin{equation}\n    \\frac{1}{\\Omega_{BZ}}\\int_{BZ}\\,\n    M(e, u, v)\n    \\cdot\n    f(\\varepsilon(e, u, v))\n    \\cdot\n    \\frac{\\partial(x, y, z)}{\\partial(e, u, v)}\n    \\, \\mathrm{d}e \\mathrm{d}u \\mathrm{d}v\n\\end{equation}\n\nwhere $\\frac{\\partial(x, y, z)}{\\partial(e, u, v)}$ is the Jacobi determinant and one can readily show that it equals to $6\\Omega_T$ where $\\Omega_T$ is the volume of the tetrahedron\n\n\nIntegral for the density of states (DOS)\nFor the density of states (DOS), the quantity $M_\\mathbf{k} =1$ and $f(\\varepsilon_\\mathbf{k})$ is the Dirac function. In this case, the contribution of the i-th tetrahedron $T_i$ to the DOS is\n\\begin{align}\n\\rho(E) &= \\frac{1}{\\Omega_{BZ}}\\int_{T_i}\\,\n     \\delta(E - \\varepsilon(e, u, v))\n     \\cdot\n     \\frac{\\partial(x, y, z)}{\\partial(e, u, v)}\n     \\, \\mathrm{d}e \\mathrm{d}u \\mathrm{d}v \\\\[9pt]\n    &= \\frac{6\\Omega_T}{\\Omega_{BZ}}\\int_{T_i}\\,\n     \\frac{1}{|\\nabla \\varepsilon(e, u, v)|}\n    \\, \\mathrm{d}S\\Bigr|_{\\varepsilon = E}\n\\end{align}\n\nwhere the volume integration over the BZ becomes a surface integration on an iso-value plane. Moreover, let us assumed $\\varepsilon_i$ is ordered according to increasing values, i.e. $\\varepsilon_1 < \\varepsilon_2 < \\varepsilon_3 < \\varepsilon_4$ and denote $\\varepsilon_{ji} = \\varepsilon_j - \\varepsilon_i$, where $\\varepsilon_0 = E$.\n\nThe norm of the derivative can be derived from the above Barycentric coordinates transformation\n\\begin{equation}\n|\\nabla\\varepsilon(e, u, v)| = \\sqrt{\\varepsilon_{21}^2+\\varepsilon_{31}^2+\\varepsilon_{41}^2}\n\\end{equation}",
+      "ground_truth_code": null,
+      "function_header": "def init_eji_array(energy, energy_vertices):\n    '''Initialize and populate a 5x5 array for storing e_ji variables, and map e_ji values\n    to sympy symbols for later evaluation.\n    Inputs:\n    - energy: A float representing the energy level for density of states integration.\n    - energy_vertices: A list of floats representing energy values at tetrahedron vertices.\n    Outputs:\n    - symbols: A dictionary mapping sympy symbol names to symbols.\n    - value_map: A dictionary mapping symbols to their actual values (float).\n    '''",
+      "test_cases": [
+        "from scicode.compare.cmp import cmp_tuple_or_list\nassert cmp_tuple_or_list(init_eji_array(10,[4,6,8,10]), target)",
+        "from scicode.compare.cmp import cmp_tuple_or_list\nassert cmp_tuple_or_list(init_eji_array(1,[1,2,3,4]), target)",
+        "from scicode.compare.cmp import cmp_tuple_or_list\nassert cmp_tuple_or_list(init_eji_array(2.2,[1.2,2.2,3.4,5.5]), target)"
+      ],
+      "return_line": "    return symbols, value_map"
+    },
+    {
+      "step_number": "17.2",
+      "step_description_prompt": "Write a function to perform DOS integration within a single tetrahedron. Consider the different scenarios where the magnitude of energy $E$ on the iso-value surface compares to the energies $\\varepsilon_i$ at the vertices.",
+      "step_background": "Background\n\nIso-surface integral\nFor different values of the energy E, the shapes of the iso-value surfaces intersected with the tetrahedron are different. Write codes to express the results of the surface integration using $\\varepsilon_0 = E, \\varepsilon_1, \\varepsilon_2, \\varepsilon_3, \\varepsilon_4$ and $\\varepsilon_{ji} = \\varepsilon_j - \\varepsilon_i$.\n\n",
+      "ground_truth_code": null,
+      "function_header": "def integrate_DOS(energy, energy_vertices):\n    '''Input:\n    energy: a float number representing the energy value at which the density of states will be integrated\n    energy_vertices: a list of float numbers representing the energy values at the four vertices of a tetrahedron when implementing the linear tetrahedron method\n    Output:\n    result: a float number representing the integration results of the density of states\n    '''",
+      "test_cases": [
+        "energy = 1.5\nenergy_vertices = [1, 2, 3, 4] #e1-e4\nassert np.allclose(float(integrate_DOS(energy, energy_vertices)), target)",
+        "energy = 2.7\nenergy_vertices = [1, 2, 3, 4] #e1-e4\nassert np.allclose(float(integrate_DOS(energy, energy_vertices)), target)",
+        "energy = 3.6\nenergy_vertices = [1, 2, 3, 4] #e1-e4\nassert np.allclose(float(integrate_DOS(energy, energy_vertices)), target)",
+        "energy = 5\nenergy_vertices = [1, 2, 3, 4] #e1-e4\nassert np.allclose(float(integrate_DOS(energy, energy_vertices)), target)",
+        "energy = 0.9\nenergy_vertices = [1, 2, 3, 4] #e1-e4\nassert (float(integrate_DOS(energy, energy_vertices)) == 0) == target"
+      ],
+      "return_line": "    return result"
+    }
+  ],
+  "general_solution": null,
+  "general_tests": [
+    "energy = 1.5\nenergy_vertices = [1, 2, 3, 4] #e1-e4\nassert np.allclose(float(integrate_DOS(energy, energy_vertices)), target)",
+    "energy = 2.7\nenergy_vertices = [1, 2, 3, 4] #e1-e4\nassert np.allclose(float(integrate_DOS(energy, energy_vertices)), target)",
+    "energy = 3.6\nenergy_vertices = [1, 2, 3, 4] #e1-e4\nassert np.allclose(float(integrate_DOS(energy, energy_vertices)), target)",
+    "energy = 5\nenergy_vertices = [1, 2, 3, 4] #e1-e4\nassert np.allclose(float(integrate_DOS(energy, energy_vertices)), target)",
+    "energy = 0.9\nenergy_vertices = [1, 2, 3, 4] #e1-e4\nassert (float(integrate_DOS(energy, energy_vertices)) == 0) == target"
+  ],
+  "split": "test"
+}

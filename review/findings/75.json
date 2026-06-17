@@ -1,0 +1,53 @@
+{
+  "problem_id": "75",
+  "split": "test",
+  "reviewer_model": "fable",
+  "steps_reviewed": 3,
+  "steps": [
+    {
+      "step_number": "75.1",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Literal transcription of the MK formula passes all 3 tests (joint=official). Targets verified analytically (-0.26977685 / -2.68756825 / 0.04361455 match formula to 8 digits). Prompt text omits b's numeric value (see minor finding); header default b=1.17 and explicit test kwargs rescue it."
+    },
+    {
+      "step_number": "75.2",
+      "static_ok": false,
+      "dynamic_status": "pass",
+      "notes": "Passes ONLY under the reverse-engineered convention d_vec = basis[ai] - (basis[aj] + di*a1 + dj*a2). The docstring never defines what a 'displacement index' is; the mirror convention (displace atom i) fails officially. Step prompt also has a truncated cross-reference: 'using the hopping evaluation from .'"
+    },
+    {
+      "step_number": "75.3",
+      "static_ok": false,
+      "dynamic_status": "pass",
+      "notes": "Passes ONLY with a bespoke hidden hop set: intralayer nearest-neighbour ONLY plus interlayer vertical + first diagonal shell (d=6.50 and 7.03 bohr). Prompt says nothing about which hops to include. No distance cutoff can reproduce it (included interlayer hop at 7.03 bohr is FARTHER than the excluded 2nd-NN in-plane hop at 4.65 bohr, t=-0.27 eV). All natural readings fail officially."
+    }
+  ],
+  "findings": [
+    {
+      "step_number": "75.3",
+      "defect_type": "D2",
+      "severity": "blocker",
+      "confidence": "high",
+      "evidence": "Full step prompt: 'Generate a Hamiltonian matrix at a given $\\mathbf{k}= (k_x, k_y)$. Calculate the eigenvalues and return the sorted list of eigenvalues in ascending order.' Docstring adds only '(k-point is in reduced coordinates)'. step_background is empty; problem_description_main only names the MK parameterization. NOTHING specifies which hops enter the Hamiltonian, yet the frozen targets encode an idiosyncratic neighbor list: intralayer nearest-neighbour hops ONLY (d=2.684 bohr) plus interlayer vertical (d=6.501 bohr) and first diagonal interlayer shell (d=7.033 bohr) -- exactly the 14-hop list that appears ONLY inside step 75.2's test-case input arrays, which official prompts never show the model (SciCode/eval/scripts/gencode.py process_problem_steps includes only step descriptions, headers, and prior code; never test_cases). Crucially this hop set is NOT expressible as any distance cutoff: it includes d=7.03 bohr while EXCLUDING the closer in-plane 2nd-NN hop at d=4.65 bohr whose MK hopping is -0.2698 eV (10% of the NN hopping -- far above tolerance). Dynamic verification against the frozen h5 targets ([-3.25845296,-2.11668354,2.47221417,2.90292233] at k=(0.5,0); [-8.98912008,-7.13628942,7.92252821,8.20288129] at Gamma; [+-0.39311939 x2] at K=(2/3,-1/3)): bespoke set -> PASS all 3 (steptest official joint PASS); full MK sum over all pairs (the entire point of the MK parameterization, impl_natural.py) -> official FAIL (Gamma gives [-11.46,-8.87,6.82,6.89]); distance cutoffs d<5, 7.5, 8.5, 10, 4*a0=10.72 bohr -> all FAIL all 3 k-points; textbook gamma0+gamma1 (NN + vertical only) -> FAILS 2/3 (Gamma gives +-8.063 +-0.393 pattern = [-8.456,-7.670,7.670,8.456]); NN + ALL interlayer -> FAILS 3/3 (K gives +-0.2702). A competent solver cannot derive the scoring hop set from any shown text; every natural physics reading fails.",
+      "suggested_fix": "State the model explicitly in the step prompt, e.g.: 'Include only (i) intralayer nearest-neighbour hops (in-plane distance a/sqrt(3)) and (ii) interlayer hops with in-plane offset 0 or a/sqrt(3) (i.e. interatomic distance < 7.5 bohr); neglect all other hops, including in-plane 2nd-nearest neighbours.' Alternatively regenerate the targets with a clean, stated distance cutoff (or the full converged MK sum) so the natural implementation passes."
+    },
+    {
+      "step_number": "75.2",
+      "defect_type": "D4",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "Docstring: 'di, dj (np.array): list of displacement indices for the hopping / ai, aj (np.array): list of atomic basis indices for the hopping'. 'Displacement index' is never defined: which lattice vectors the scalars multiply, which atom is displaced, and the sign are all unstated (the step prompt is itself truncated: 'using the hopping evaluation from .'). The frozen target ([-2.68756825 x6, 0.39311939, 0.17776531 x3, 0.39311939, 0.17776531 x3]) encodes d_vec = basis[ai] - (basis[aj] + di*latvecs[0] + dj*latvecs[1]), i.e. (di,dj) jointly form the 2D cell displacement (n1,n2) of atom j. Verified dynamically: this convention -> steptest official PASS. The mirror, equally reasonable reading d_vec = (basis[ai] + di*a1 + dj*a2) - basis[aj] (displace atom i) gives [-2.68757,-0.01531,-0.01531,...] -> steptest official FAIL (impl_natural.py). The naming-suggested per-atom reading (di displaces atom i, dj displaces atom j, e.g. along a1) gives [-2.68757,-0.1163,...] -> also fails. Since |d| and dz are what matter, the overall sign of d_vec is irrelevant but the +-R attachment is not; the solver must guess and the variable names di/dj actively mislead toward the per-atom reading.",
+      "suggested_fix": "Define the convention in the docstring, e.g.: 'di, dj: integer cell indices (n1, n2); the hop connects atom ai in the home unit cell to atom aj in the cell displaced by n1*latvecs[0] + n2*latvecs[1], i.e. d = basis[ai] - (basis[aj] + n1*a1 + n2*a2).' Renaming the args to n1, n2 (or d1, d2) would remove the misleading i/j association."
+    },
+    {
+      "step_number": "75.1",
+      "defect_type": "D10",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "Prompt parameter list is corrupted: '$b$ = (b,a.u.)$^{-1}$' states only the UNIT of the decay constant, never its value (1.17); similarly garbled '$a_0$ = 2.68 b, a.u.'. The value 1.17 is recoverable from the function-header default (b=1.17) and all three test cases pass every parameter explicitly, so scoring is unaffected -- verified: literal implementation passes officially (3/3).",
+      "suggested_fix": "Fix the prompt text to '$b$ = 1.17 (Bohr)$^{-1}$' (decay constant 1/0.184a of the MK paper) and clean up the 'b, a.u.' phrasing to 'Bohr (a.u.)'."
+    }
+  ],
+  "overall_assessment": "Step 75.1 is clean and fairly scored. Steps 75.2 and 75.3 are not fair as-is: 75.2's 'displacement index' convention is undefined and only one of several reasonable readings matches the frozen target (50/50-or-worse guess), and 75.3 is effectively unsolvable -- the target Hamiltonian uses a hidden bespoke neighbor list (intralayer NN only, yet interlayer hops out to 7.03 bohr) that contradicts every natural reading of 'Moon-Koshino tight-binding' (full sum or any distance cutoff) and is visible only in step 75.2's held-out test inputs. A competent solver will pass 75.1, has a coin-flip on 75.2, and will almost surely fail 75.3."
+}

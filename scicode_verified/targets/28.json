@@ -1,0 +1,23 @@
+{
+ "problem_id": "28",
+ "targets": {
+  "28.3": {
+   "_transform": "For tests 0,1,2 the target is a tuple (Wz, focus_depth, Intensity). Replace ONLY the Intensity component (tuple index 2, an (801,801) array) with its element-wise SQUARE: Int_new = Int_old**2 (true |E|^2). Wz (index 0) and focus_depth (index 1) UNCHANGED. test3 = (True,True) UNCHANGED.",
+   "verify_corner_old_amp": [
+    0.969811636392,
+    0.990953860888,
+    0.991588359888
+   ],
+   "verify_corner_new_intensity": [
+    0.940534610081,
+    0.98198955441,
+    0.983247475465
+   ]
+  }
+ },
+ "format": "28.3 \u4ec5 Intensity \u5206\u91cf\u5e73\u65b9(\u632f\u5e45\u2192\u771f\u00b7\u5f3a\u5ea6|E|\u00b2);28.1/28.2 \u65e0 target \u6539\u52a8\u3002Int \u6570\u7ec4 801\u00d7801,\u6545\u8bb0\u53d8\u6362\u89c4\u5219+\u89d2\u70b9\u6821\u9a8c,\u4e0d\u5185\u8054\u5168\u6570\u7ec4\u3002",
+ "note": "28.3 \u51bb\u7ed3 target \u7684 'Intensity' \u5176\u5b9e\u662f\u5355\u4f4d\u5cf0\u503c\u632f\u5e45 |E|(\u89d2\u70b9=exp(-r\u00b2/w\u00b2)),\u4e0e\u9898\u540d/\u9898\u9762/docstring \u7684 'intensity' \u77db\u76fe\u3002\u72ec\u7acb\u590d\u73b0\u786e\u8ba4:target\u89d2\u70b9=\u632f\u5e45,\u5e73\u65b9\u540e=|E|\u00b2(0.9405/0.9820/0.9832)\u3002\u552f\u4e00 fix-by-target \u9879;\u5176\u4f59(\u9891\u7387\u7f51\u683c1/L\u3001\u5355\u4f4d\u5cf0\u503c\u5f52\u4e00\u5316\u3001\u7edd\u5bf9-z\u51e0\u4f55\u3001\u7126\u70b9grid-argmin\u3001\u5355\u4f4dmm)\u5747 fix-by-doc \u65e0 target \u6539\u3002",
+ "_rounds": [
+  "r1"
+ ]
+}

@@ -1,0 +1,47 @@
+{
+  "problem_id": "57",
+  "verifier_model": "fable",
+  "n_confirmed": 4,
+  "n_refuted": 0,
+  "n_uncertain": 0,
+  "verdicts": [
+    {
+      "step_number": "57.2",
+      "defect_type": "D4",
+      "verdict": "confirmed",
+      "tier": "B",
+      "revised_severity": null,
+      "fix_kind": "prompt_edit",
+      "one_liner": "Prompt/docstring/background give no u[1] seed; h5 target test 0 has u[1]=1.0 exactly (Euler seed; Taylor seed gives ~0.846 with h^2/2*f0=-0.154), so only Euler passes."
+    },
+    {
+      "step_number": "57.2",
+      "defect_type": "D4",
+      "verdict": "confirmed",
+      "tier": "A",
+      "revised_severity": null,
+      "fix_kind": "prompt_edit",
+      "one_liner": "All 57.2/57.3 tests verifiably pass step=x[0]-x[1]<0; h5 test-2 target starts [0, -0.05050505...] = negative of the physical u'(0)=+1 solution, so h=abs(step) sign-flips and fails allclose."
+    },
+    {
+      "step_number": "57.4",
+      "defect_type": "D4",
+      "verdict": "confirmed",
+      "tier": "A",
+      "revised_severity": null,
+      "fix_kind": "prompt_edit",
+      "one_liner": "h5 target for [0,-2,3,-4,-5] is 2 (strict product<0 convention); the equally standard np.diff(np.sign(a))!=0 convention gives 3 and fails; prompt says nothing about zeros."
+    },
+    {
+      "step_number": "57.5",
+      "defect_type": "D4",
+      "verdict": "confirmed",
+      "tier": "B",
+      "revised_severity": null,
+      "fix_kind": "prompt_edit",
+      "one_liner": "h5 targets are exact Estep=1e-4 grid values (1.0289, 1.0288/5.0713/9.0960; odd states ~integers), confirming unrefined scan recording; quantization 1e-4 exceeds allclose tol ~1.03e-5 so brentq-refined or E-Estep variants fail, and even-state values sit 1-3% above true eigenvalues 1/5/9 per the Euler-seed artifact."
+    }
+  ],
+  "missed_defects": [],
+  "summary": "All 4 findings confirmed: every quoted target value checks out against the frozen h5 (Euler seed u[1]=1.0, negative-step sign-flipped test-2 target, zero-not-a-sign-change target=2, Estep-quantized unrefined scan energies). Problem is fixable to fair with the proposed one-sentence prompt clarifications; no target re-freeze strictly required."
+}

@@ -1,0 +1,130 @@
+{
+  "problem_id": "22",
+  "split": "test",
+  "verifier_model": "fable",
+  "verdicts": [
+    {
+      "step_number": "22.2",
+      "defect_type": "D4",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "Reproduced both legs myself. (1) steptest joint: conj-base + printed recursion (review/work/22/step_22.2.py) PASS 3/3; values bit-exact vs h5 targets incl. the -3.749699716304616e-17 residual (verified complex()==complex()). (2) literal scipy base (step_22.2_literal.py): values (-0.5, +0.33071891388307373, +3.7497e-17-0.6123724j) -> fails tests 1,3 (isolate run + value comparison; joint=official would FAIL). (3) My own definitional quadrature (verify/quad_T_22.2.py): conj-base = definitional base for ALL (n,nu) rows checked (verify/recursion_check_22.2.py part 1), so the conj reading is the only one consistent with the definitional equation; the literal sph_harm(-nu,...) reading flips sign for odd nu. Exactly one unstated reading passes, as claimed. CAVEAT on diagnosis: the first pass's implication that the targets are the correct values 'under Gumerov-Duraiswami's convention' is wrong for tests 1-2 -- see missed_defects[0]: targets are (-1)^m x the true rotation coefficients and are not correct under ANY convention. The operative D4 claim (single unstated reading separates pass from fail) stands; severity stays major because the printed-recipe path does pass once the base reading is guessed.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[1].step_background, the base-case sentence",
+        "before": "The base cases for the recursion can be set as\n$$T_n^{\\nu 0}(Q) = \\sqrt {\\frac{{4\\pi }}{{2n + 1}}} Y_n^{ - \\nu }\\left( {\\theta ',\\varphi '} \\right),$$",
+        "after": "The base cases for the recursion can be set as\n$$T_n^{\\nu 0}(Q) = \\sqrt {\\frac{{4\\pi }}{{2n + 1}}} \\overline{Y_n^{\\nu }\\left( {\\theta ',\\varphi '} \\right)},$$\nwhere the overline denotes complex conjugation and $Y_n^m$ is the standard (Condon-Shortley, $e^{im\\varphi}$) spherical harmonic as implemented by scipy.special.sph_harm_y. Compute $T$ via the recursion below (do not substitute an independent rotation-coefficient method).",
+        "regen_recipe": null,
+        "side_effects": "None on h5 targets (this makes the existing frozen targets derivable from the printed recipe). 22.3 consumes Tnvm, so pinning the base also pins 22.3's chain. Residual wart documented in missed_defects[0]: the targets remain non-physical rotation coefficients, so a solver using an independent correct method (Wigner-D) still fails -- full repair would require fixing the recursion formula and regenerating 22.2 AND 22.3 targets (heavy); the doc_edit is the minimal fair-for-recipe-followers fix."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "22.3",
+      "defect_type": "D7",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "Wrote my own quadrature projection (verify/quad_BR_22.3.py): psi(r-r0) projected onto conj(Y_2^1) on spheres a=0.7 and a=1.1 (radii agree to ~1e-15; test-1 target reproduced to 12 digits, validating method + B column mapping). Truth: t2 = -0.152544796805+0.152544796805j, t3 = -0.144477583299+0.288955166598j; frozen targets are their EXACT complex conjugates. Attacked via the conjugated-harmonics (e^{-im phi}) world: it does reproduce targets 1-3 -- but it is refuted because (a) 22.2's own frozen target test 3 (+0.6123724j) would have to be -0.6123724j in that world (my quadrature direction table, verify/quad_T_directions.py), and (b) test 4 is nonzero in that world too (-0.2177j). Official scoring reproduced: forward implementation 1/4 (steptest --isolate), inverse-contraction gold-replica 4/4 joint PASS; replica code inspected -- B contracted on the formula's output-side (l,s) slots (lines 162-164 of step_22.3_goldreplica.py). Additionally validated the fix: BOTH forward-chain variants (either unstated negative-m T identity) reproduce the truth values on tests 1-3 to <1e-7, so regenerated targets are passable.",
+      "fix": {
+        "kind": "target_regen",
+        "target_location": "h5 '22.3' targets for test_cases[1] and test_cases[2] (and the identical general_tests entries)",
+        "before": "test2: -0.15254479680485558-0.15254479680485558j ; test3: -0.14447758329891097-0.28895516659782194j",
+        "after": "test2: -0.15254479680485558+0.15254479680485558j ; test3: -0.14447758329891097+0.28895516659782194j (complex conjugates of current values = physical truth; test 1 unchanged, it is real)",
+        "regen_recipe": "review/work/22/verify/quad_BR_22.3.py computes both values by direct two-radius quadrature projection (agreement 1e-15); equivalently conjugate the stored values. Cross-validated against two independent forward-chain implementations (review/work/22/step_22.3_correct.py and verify/correct_signconj.py), both match to <1e-7.",
+        "side_effects": "general_tests duplicates these test cases -> same regenerated targets apply. The inverse-contraction (buggy-reference-replica) solution will then fail, as it should. Test 4 must be fixed separately (next verdict). No earlier step touched."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "22.3",
+      "defect_type": "D7",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "My quadrature: BR_2^2 for r0=(0,0.5,0), B_1^1=1 is +0.217672526159j (radii 0.7/1.1 agree to 1e-15) -- NOT zero. Attacked all escape readings: conjugated-harmonics world gives -0.2177j (nonzero); reversed B-column mapping (source m=-1) gives -0.00197j (nonzero). The exact float 0 arises only from the gold's l >= |m| pruning (goldreplica line 157: range(abs(m), N_t+1) -> empty sum since B sits at l=1 < |m|=2), nothing in the prompt's sum_{l=|nu|}^inf licenses it; goldreplica 4/4 joint PASS reproduced. Also note the D8 corollary: a trivial 'return 0' PASSES this test while every correct implementation fails it. IMPORTANT correction to the first pass's fix: their proposed regen value -0.2176725262j is the conjugated-world value, not the standard-convention truth (+0.2176725262j); and regen alone CANNOT fix this test -- for m!=0 sources the printed pipeline never reproduces truth (forward chains give +0.1079j or -0.00197j depending on the unstated negative-m identity, vs truth +0.2177j), because 22.2's broken recursion leaks in. The test input itself must move into the validated regime.",
+      "fix": {
+        "kind": "test_edit",
+        "target_location": "sub_steps[2].test_cases[3] (and general_tests[3]) + h5 '22.3'/test4 target",
+        "before": "r0 = np.array([0, 0.5, 0])\nN_t = 5\nB = np.zeros((N_t + 1, 2 * N_t + 1))\nB[1, N_t + 1] = 1\nwl = 2 * np.pi\nn = 2\nm = 2\nassert (compute_BRnm(r0, B, n, m, wl, N_t) == 0) == target",
+        "after": "r0 = np.array([0, 0.5, 0])\nN_t = 5\nB = np.zeros((N_t + 1, 2 * N_t + 1))\nB[1, N_t] = 1\nwl = 2 * np.pi\nn = 2\nm = 1\nassert np.allclose(compute_BRnm(r0, B, n, m, wl, N_t), target)",
+        "regen_recipe": "New target = +0.15530995409607756j. Validated three ways (verify session output): quadrature truth (two radii) = fwd+plain-conj chain = fwd+sign-conj chain, all +0.1553099541j to 1e-10. (By symmetry it equals i*|test-1 value|.) Never gate a float recursion output on exact '== 0'.",
+        "side_effects": "Removes the only test exercising an m!=0 source -- acceptable, because the printed pipeline is provably wrong for m!=0 sources (and for z!=0 translations), so no fair target exists there without repairing 22.2's recursion + all targets. Also removes the false-positive path where 'return 0' scores the test. general_tests[3] must be updated identically."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "22.3",
+      "defect_type": "D9",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "Static: 22.1's background initiates only (R|R)_{l0}^0 -> '(R|R)_{lm}^m' upward in m (quote: 'which can be used to initiate the recursion process for all (R|R)_{lm}^m'); 22.2's recursion only produces T_{n+1}^{nu,m+1} from m=0 upward; both steps' tests use m>=0 only; 22.3's formula needs T_l^{s nu} with nu=-n..n<0 and (R|R)^{nu<0}; no negative-order relation appears anywhere in the problem text (grepped). Dynamic (decisive, ran myself): flipped only the negative-m T identity in the target-matching replica -- plain conj(T_n^{-v,m}) (the identity the first pass's own 22.2 file uses) makes the inverse contraction return ZEROS for tests 1-3 -> official FAIL, while (-1)^{|m|+|nu|}*conj(...) passes 4/4. The two identities also diverge in forward chains (test-4 values +0.1079j vs -0.00197j). So passing the as-is benchmark requires guessing one specific unstated, convention-entangled relation. Upgraded confidence medium -> high.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[0].step_background (add after the b_n^m definition) and sub_steps[1].step_background (add after the recursion)",
+        "before": "(no negative-order relations stated anywhere)",
+        "after": "Append to 22.1 background: 'For coaxial translation the coefficients depend on the order only through |m|: $(R|R)_{ln}^{-m}(r_0) = (R|R)_{ln}^{m}(r_0)$.' Append to 22.2 background: 'Coefficients of negative order $m<0$ follow from $T_n^{\\nu,-m}(Q) = (-1)^{|m|+|\\nu|}\\,\\overline{T_n^{-\\nu,m}(Q)}$.'",
+        "regen_recipe": null,
+        "side_effects": "None on targets (these are exactly the relations the target-matching reference uses; stating them makes the existing 22.3 targets derivable). After the finding-2/3 fixes, tests 1-3 + new test 4 pass under either identity guess, so this edit becomes derivability hygiene rather than score-critical."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "22.3",
+      "defect_type": "D10",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Verified all quotes verbatim from review/problems/22.json: 22.3 prompt ends '...calculate the reexpansion coeffcient with and .'; 22.3 background 'The rotation matrix $Q$ with the definition in can be generated...'; 22.2 background '...$a_n^m$ and $b_n^m$ are consistent with those in .'; 22.1 equation contains '\\sum\\limits_{s =  - l}^l' while the summand '(R|R)_{ln}^{m} R_l^m(r_q)' has no s. All four dangling/spurious items confirmed by direct string checks.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[2].step_description_prompt; sub_steps[2].step_background; sub_steps[1].step_background; sub_steps[0].step_description_prompt",
+        "before": "'...reexpansion coeffcient with and .' / 'with the definition in can be generated' / 'consistent with those in .' / '\\sum\\limits_{s =  - l}^l {(R|R)_{ln}^{m}...} R_l^m'",
+        "after": "'...reexpansion coefficient with Rlnm (step 22.1) and Tnvm (step 22.2).' / 'with the definition in step 22.2 can be generated' / 'consistent with those in step 22.1.' / drop the spurious \\sum_{s=-l}^{l} (m is conserved under coaxial translation)",
+        "regen_recipe": null,
+        "side_effects": "Text-only; no targets touched."
+      },
+      "uncertainty_notes": null
+    }
+  ],
+  "missed_defects": [
+    {
+      "step_number": "22.2",
+      "defect_type": "D7",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "The frozen 22.2 targets are NOT rotation coefficients of the given Q under ANY spherical-harmonic phase convention or direction reading -- the first pass attributed the mismatch entirely to convention (D4) and asserted the targets follow G&D's convention. Proof (verify/quad_T_directions.py + hand analytics): the definitional T_2^{11}(Q1) = -1/2 EXACTLY (analytic moment integral -c^2*int x^2 z^2 dOmega = -(15/8pi)(4pi/15)), and a (nu=m) diagonal entry is invariant under every phase dressing s(m)s(nu) and under conjugation and under Q<->Q^{-1}; yet the target is +0.5. All three targets equal (-1)^m x the definitional value. Root cause isolated (verify/recursion_check_22.2.py): the printed recursion is mathematically broken -- seeded with the EXACT definitional m=0 row it produces a wrong-magnitude entry (T_2^{0,1}: recursion -0.408248 vs true 0). Downstream consequence measured: the chained 22.3 pipeline is wrong for every m!=0 source (B_1^1 -> BR_1^1: chain +0.0246 vs truth +0.9507) and for z!=0 translations (r0=(0.3,0.4,0.5): chain -0.0223+0.0297j vs truth -0.0882+0.1176j); the frozen tests happen to sit in the narrow cancellation regime (m=0 source, z=0 translation, (n,m)=(2,1) output).",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "bundled with verdict 1's fix (sub_steps[1].step_background)",
+        "before": "(see verdict 1)",
+        "after": "Minimal: verdict 1's doc_edit makes the frozen targets derivable from the printed recipe (self-consistent benchmark, fair for recipe-following solvers). Clean-physics alternative (heavy, NOT recommended as minimal): correct the recursion formula in the background and regenerate all 22.2 + 22.3 targets from definitional values (provided in verify/ scripts).",
+        "regen_recipe": "If full repair is ever wanted: definitional values via verify/quad_T_22.2.py -> tests (1,2,3) = (-0.5, -0.330718913883, -3.75e-17+0.6123724356957946j).",
+        "side_effects": "Full repair would cascade into all four 22.3 targets and the 22.3 background formula; the minimal doc_edit has none."
+      }
+    },
+    {
+      "step_number": "22.3",
+      "defect_type": "D4",
+      "severity": "minor",
+      "confidence": "medium",
+      "evidence": "The B matrix's column<->m mapping is never stated; problem_io and the 22.3 docstring say only 'B : matrix of shape(N_t + 1, 2 * N_t + 1)'. The intended centered mapping col = m + N_t is canonical and was validated (my quadrature with that mapping reproduces test-1's target to 12 digits), and the only test where the plausible alternative (reversed, col = N_t - m) changes the answer is the already-broken test 4 (reversed-source value -0.00197j, still nonzero), so the operational impact is currently nil -- but a solver must still infer it.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[2].function_header docstring, B parameter line (and problem_io)",
+        "before": "B : matrix of shape(N_t + 1, 2 * N_t + 1)\n        Expansion coefficients of the elementary regular solutions.",
+        "after": "B : matrix of shape(N_t + 1, 2 * N_t + 1)\n        Expansion coefficients of the elementary regular solutions; B[n, m + N_t] holds B_n^m for n = 0..N_t, m = -N_t..N_t.",
+        "regen_recipe": null,
+        "side_effects": "Text-only."
+      }
+    }
+  ],
+  "summary": "All 5 first-pass findings CONFIRMED (0 refuted, 0 uncertain) after independent reproduction: my own quadrature ground truths, analytic moment integrals, official steptest reruns, and identity-flip ablations. Two material corrections: (a) 22.2 is worse than reported -- its targets are provably not rotation coefficients under ANY convention (missed D7: target = (-1)^m x truth; the printed recursion itself is broken), and (b) the first pass's test-4 regen value (-0.2177j) is wrong and a pure regen cannot work for m!=0 sources; the test input must be moved into the validated regime (concrete validated replacement supplied: r0=(0,0.5,0), B_1^0, (n,m)=(2,1), target +0.15530995409607756j). The problem IS fixable to fair with moderate effort: three doc_edits (base-case reading, negative-order relations, dangling refs), conjugating two h5 targets, and one test-case replacement with a triple-validated target -- after which recipe-following forward solvers pass all steps under either unstated-identity guess. Full physical correctness of the pipeline (arbitrary inputs) would additionally require repairing 22.2's recursion and regenerating everything -- not needed for fair scoring of the frozen tests."
+}

@@ -1,0 +1,8 @@
+{
+  "problem_id": "56",
+  "verifier_model": "fable",
+  "n_confirmed": 0, "n_refuted": 0, "n_uncertain": 0,
+  "verdicts": [],
+  "missed_defects": [],
+  "summary": "First-pass review flagged zero defects (empty findings array); nothing to confirm or refute. The reviewer's notes show all four steps pass under official joint scoring and two latent fragilities (order-unspecified list-of-tuples vs canonical itertools order; allowed-prefilter vs all-perms feasibility) were examined and judged non-defects. Problem is fair to score as-is."
+}

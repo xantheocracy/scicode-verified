@@ -1,0 +1,55 @@
+{
+  "problem_id": "18",
+  "split": "test",
+  "reviewer_model": "fable",
+  "steps_reviewed": 2,
+  "steps": [
+    {
+      "step_number": "18.1",
+      "static_ok": false,
+      "dynamic_status": "pass",
+      "notes": "Passes 3/3 ONLY with 1-based basis index (i=1 -> first basis fn). Literal 0-based reading of the background's Cox-de Boor formula fails tests 0 and 2 (0.18 vs 0.81; 0.0625 vs 0.4375). Docstring is garbled (xi called 'knot index, integer' though tests pass float 0.1; output called '1d array of size 1, 2 or 3' though targets are scalars)."
+    },
+    {
+      "step_number": "18.2",
+      "static_ok": false,
+      "dynamic_status": "fail",
+      "notes": "Correct rational-NURBS implementation passes tests 1 and 2 but cannot pass test 0: input w=[0] has length 1 while n_1*n_2=28 weights are needed (IndexError), and the frozen target is the shape-(2,) array [0.5, 1.0] = [B_{i_1}(xi_1), B_{i_2}(xi_2)] stacked, not a NURBS basis value. Proven no single function passes all 3: stacked-pair return passes t0 but fails t1/t2; any scalar fails t0. Step is unpassable."
+    }
+  ],
+  "findings": [
+    {
+      "step_number": "18.2",
+      "defect_type": "D7",
+      "severity": "blocker",
+      "confidence": "high",
+      "evidence": "Test 0 sets 'w = [0]' with Xi_1=[0,0,0,1,2,2,3,4,4,4], p_1=2, Xi_2=[0,0,0,1,2,2,2], p_2=2, so n_1=7, n_2=4 and a NURBS rational basis needs n_1*n_2=28 weights; w has length 1 and weight value 0 (denominator sum would be 0 anyway). A correct implementation raises 'IndexError: index 4 is out of bounds for axis 0 with size 1' (steptest run on review/work/18/step_18.2.py: test 1/3 FAIL, tests 2-3 PASS). The frozen h5 target for test 0 is the shape-(2,) array [0.5, 1.0], which numerically equals the two UNIVARIATE B-spline values stacked: B_{i_1=2,p=2}(xi_1=1; Xi_1)=0.5 and B_{i_2=1,p=2}(xi_2=0; Xi_2)=1.0 (verified in review/work/18/convention_probe.py) -- not 'value of NURBS basis function at a given point' as the prompt demands. Exhaustive alternative check (review/work/18/step_18.2_alternatives.py): returning np.array([N1,N2]) passes test 0 but fails tests 1 (target 0.0625) and 2 (target 0.14); any scalar-returning interpretation fails test 0 because np.allclose(scalar,[0.5,1.0]) requires 0.5==1.0. Therefore NO single implementation can pass all 3 tests; since the harness requires all tests to pass, step 18.2 scores 0 for every solver.",
+      "suggested_fix": "Regenerate test 0 with a valid weight vector (length n_1*n_2=28, e.g. non-uniform positive weights so the rational part is actually exercised) and store the scalar rational basis value R_{i_1,i_2}(xi_1,xi_2) as target. Also fix the docstring output spec ('1d array of size 1 or 2') to 'float'."
+    },
+    {
+      "step_number": "18.1",
+      "defect_type": "D4",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "Prompt/docstring never state the basis-index base. Background gives the standard Cox-de Boor formula 'B_{i,0}(t):= 1 if t_i <= t < t_{i+1}', whose literal Python translation (Xi[i] <= xi < Xi[i+1], 0-based) yields B_{1,2}(0.1)=0.18 for test 0 and 0.0625 for test 2, but the frozen targets are 0.81 and 0.4375 -- which equal the 1-BASED values (i=1 means the first basis function, base case Xi[i-1] <= xi < Xi[i]). Dynamic proof: steptest on review/work/18/step_18.1.py (1-based) = 3/3 PASS; review/work/18/step_18.1_0based.py (0-based) = 1/3 (only the degenerate target 0.0 passes). The docstring line 'i : polynomial index , integer' gives no disambiguation. The wrong-but-equally-standard 0-based choice (used by Piegl & Tiller and most code) silently fails 2/3 tests, and propagates into 18.2 (its tests 1-2 also only pass with 1-based Bspline).",
+      "suggested_fix": "State the convention explicitly in the docstring, e.g. 'i : index of the basis function, 1-based (i=1 is the first basis function; degree-0 base case is Xi[i-1] <= xi < Xi[i])'. Alternatively regenerate targets with the conventional 0-based indexing and document that."
+    },
+    {
+      "step_number": "18.2",
+      "defect_type": "D8",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "The only two passable tests (1 and 2) both use unit weights ('w = np.ones(n_1*n_2)' and 'w = [1,1,1,1,1,1,1,1,1,1,1,1]'), for which the rational denominator equals 1 by partition of unity. Verified dynamically (review/work/18/step_18.2_alternatives.py): an implementation that IGNORES w and normalization entirely and returns the plain tensor product Bspline(xi_1,i_1,p_1,Xi_1)*Bspline(xi_2,i_2,p_2,Xi_2) passes tests 1 and 2 identically to the correct rational implementation (0.0625 and 0.14). Hence the NURBS-specific content of the step (weight indexing, flattening order of the 1d w over the 2D index grid, rational normalization) is completely unconstrained by any passable test; the w flattening convention (i_1-major vs i_2-major) is likewise undefined in the prompt and untestable.",
+      "suggested_fix": "Add/replace at least one test with non-uniform weights (and a valid-length w), and state the flattening order of w in the docstring (e.g. 'w[(i_1-1)*n_2 + (i_2-1)]')."
+    },
+    {
+      "step_number": "18.1",
+      "defect_type": "D10",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "Docstring contradicts the tests and targets on three counts: (1) 'xi : knot index, integer' -- but tests pass xi=0.1, 1.5, 0.5 (a float parameter coordinate, not an index); (2) 'i : polynomial index' -- i is the basis-function index, while p is the degree; (3) 'Outputs: 1d array of size 1，2 or 3' -- all three frozen targets are scalar float64 (0.81, 0.0, 0.4375); a solver who takes the size-2/3 array description literally would fail np.allclose. The 18.2 docstring has the matching defect 'N : ... 1d array of size 1 or 2' while problem_io says 'N : ... float'. Test-case magnitudes make the actual roles recoverable, so this is unlikely to flip a competent solver on its own, but it adds noise on top of the D4 ambiguity.",
+      "suggested_fix": "Rewrite the docstrings: 'xi : evaluation point (parameter coordinate), float; i : index of the basis function (1-based), integer; p : polynomial degree, integer; Returns: float'. Fix 18.2's output description to 'float' as well."
+    }
+  ],
+  "overall_assessment": "Not fair to score as-is. Step 18.2 is a hard blocker: its first test feeds an invalid weight vector (w=[0], length 1 vs 28 required) and its frozen target is the stacked pair of univariate B-spline values rather than a NURBS basis value, so no single correct (or incorrect) implementation can pass all three tests. Step 18.1 is solvable but only by guessing the authors' unstated 1-based basis-index convention; the equally standard 0-based reading of the quoted Cox-de Boor formula fails 2/3 tests and propagates into 18.2. Additionally, all passable 18.2 tests use unit weights, so the rational/weighted part of NURBS is never actually tested, and the docstrings misdescribe both inputs and output types."
+}

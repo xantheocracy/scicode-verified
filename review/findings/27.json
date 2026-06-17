@@ -1,0 +1,29 @@
+{
+  "problem_id": "27",
+  "split": "test",
+  "reviewer_model": "fable",
+  "steps_reviewed": 3,
+  "steps": [
+    {"step_number": "27.1", "static_ok": true, "dynamic_status": "pass",
+     "notes": "phi = 0.0259*ln(N/n_i) passes all 3 tests; targets match hand calc; arity/units fine."},
+    {"step_number": "27.2", "static_ok": false, "dynamic_status": "pass",
+     "notes": "Passes with q=1.6e-19, eps0=8.854e-12, phi_b=phi_p+phi_n, C=eps*A/W. But prompt's electron-charge constant is corrupted (mantissa missing) and background contradicts test 2 (V0=-3 vs 'assume V0=0') and omits area factor A."},
+    {"step_number": "27.3", "static_ok": false, "dynamic_status": "pass",
+     "notes": "f=1/(2piRC) passes all 4 tests with numpy-vectorized impl. Docstring says xi/f_3dB are float but tests pass (50,) ndarray; scalar math-module impl crashes (verified). Test 0 boolean target=True is individually weak (constant impl satisfies it) but tests 1-3 constrain the step, so no exploitable D8."}
+  ],
+  "findings": [
+    {"step_number": "27.2", "defect_type": "D2", "severity": "major", "confidence": "high",
+     "evidence": "Step prompt: 'The vacuum permittivity is $8.854\\times 10^{-12} F/m$ and the electron charge is $\\times 10^{-19} C$.' -- the electron-charge mantissa is missing (clearly meant '1.6\\times 10^{-19}'). The value is load-bearing and not derivable from the prompt. Verified with steptest: q=1.6e-19 -> 27.2 PASS (3/3) and 27.3 PASS (4/4); q=1.602e-19 -> 27.2 FAIL; q=1.602176634e-19 (CODATA, e.g. scipy.constants.e) -> 27.2 FAIL (0/3 under --isolate) and 27.3 FAIL. So a competent solver who fills the gap with the precise CODATA charge fails every numeric test of steps 27.2 and 27.3; only the exact textbook rounding 1.6e-19 passes. Tolerance leaves no slack: even using eps0=8.8541878128e-12 instead of the stated 8.854e-12 (rel. diff 2.1e-5) flips 27.2 and 27.3 to FAIL, confirming any constant-precision deviation is fatal (eps0 and kT ARE stated in the prompt, so those are on the solver; q is not).",
+     "suggested_fix": "Restore the missing mantissa in the step-2 prompt: 'the electron charge is $1.6\\times 10^{-19}$ C'. (Alternatively regenerate targets with CODATA constants and loosen rtol, but fixing the prompt text is the minimal change.)"},
+    {"step_number": "27.2", "defect_type": "D10", "severity": "minor", "confidence": "high",
+     "evidence": "Step background: 'Here we assume no applied voltage, so $V_0=0$.' But test 2 calls capacitance(0.5, 1000, 1e19, 1e17, 1.8e6, 13, -3) with V0=-3. Verified: an implementation that takes the background sentence literally and hardcodes V0=0 in the width formula passes tests 0-1 but FAILS test 2 (steptest --isolate: 2/3). The function signature ('V0 (float): Applied voltage to the p-i-n diode (V)') and the formula's explicit (-V_0+\\phi_b) term make the intended general reading inferable, so most competent solvers pass, but the sentence is a live contradiction with the hidden test.",
+     "suggested_fix": "Delete the sentence 'Here we assume no applied voltage, so V_0=0' from the step-2 background (or rephrase as 'for V_0=0 this reduces to ...')."},
+    {"step_number": "27.2", "defect_type": "D10", "severity": "minor", "confidence": "high",
+     "evidence": "Step-2 background formula gives capacitance PER UNIT AREA: '$C=\\frac{\\varepsilon}{x_p+x_i+x_n}=\\frac{\\varepsilon}{\\sqrt{x_i^2+\\ldots}}$' -- the detector area A never appears, yet the docstring output is 'C (float): Capacitance of the p-i-n diode (F)' and the frozen targets require C = eps*A/W (verified: only the A-multiplied form passes; targets are ~0.05-460 fF, consistent with A in um^2). The background also calls the device a 'p-i-p diode' (typo for p-i-n). A solver implementing the background formula verbatim returns per-area capacitance and fails by ~9-12 orders of magnitude; the A input + F output unit make the intent inferable, hence minor.",
+     "suggested_fix": "Write the background formula as C = epsilon*A / (x_p+x_i+x_n) and fix 'p-i-p' -> 'p-i-n'."},
+    {"step_number": "27.3", "defect_type": "D10", "severity": "minor", "confidence": "high",
+     "evidence": "Header docstring: 'xi (float): Intrinsic width of the depletion region (um).' and 'Output: f_3dB (float): 3dB frequency (Hz).' But all four test cases pass xi as a 50-element ndarray (xi_arr = np.linspace(0, 5, 50)) and the h5 targets for tests 1-3 are shape-(50,) float arrays. Verified: a spec-compliant scalar implementation using math.sqrt/math.pi passes 27.2 (3/3) but crashes 27.3 with 'TypeError: only length-1 arrays can be converted to Python scalars' -> official FAIL. Default numpy-vectorized style passes without modification, so the practical mis-scoring risk is modest, but the documented type contract is violated by every test of this step.",
+     "suggested_fix": "Change the 27.3 (and capacitance) docstrings to 'xi (float or np.ndarray)' and 'f_3dB (float or np.ndarray)', or state that the function must be numpy-broadcastable over xi."}
+  ],
+  "overall_assessment": "The physics is simple and the targets are internally consistent (a literal numpy implementation with q=1.6e-19 passes all 3 steps, 10/10 tests). The one real hazard is the corrupted electron-charge constant in step 27.2's prompt: the mantissa is literally missing ('the electron charge is $\\times 10^{-19} C$'), and the frozen targets only accept the textbook rounding 1.6e-19 -- the precise CODATA value fails every numeric test of steps 2 and 3. Secondary doc issues (background says 'assume V0=0' while a test uses V0=-3; background formula omits the area factor; float-typed xi actually receives a (50,) array) are inferable by a competent solver but should be cleaned up. With the charge constant restored, the problem is fair to score."
+}

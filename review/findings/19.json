@@ -1,0 +1,39 @@
+{
+  "problem_id": "19",
+  "split": "dev",
+  "reviewer_model": "fable",
+  "steps_reviewed": 2,
+  "steps": [
+    {
+      "step_number": "19.1",
+      "static_ok": false,
+      "dynamic_status": "pass",
+      "notes": "Gold (*args) passes 3/3; targets correct (kron results). BUT the provided function_header 'def tensor():' has zero params while every test calls tensor(a, b) -> literal-header implementation fails 0/3 with TypeError (verified)."
+    },
+    {
+      "step_number": "19.2",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Gold passes 4/4; independent literal-formula impl (np.vdot) passes 4/4. Targets 1,1,0,0 match the physics (Bell->1, GHZ4->1, W4->0, product->0). Test suite is weak: all targets are exactly 0 or 1, so forgetting the square and using sigma_x both pass 4/4 (verified)."
+    }
+  ],
+  "findings": [
+    {
+      "step_number": "19.1",
+      "defect_type": "D1",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "function_header is literally \"def tensor():\" -- zero parameters -- while its own docstring says \"Input:\\n    args: any number of arrays\" and all three test_cases call it with two positional arguments, e.g. \"assert np.allclose(tensor([0,1],[0,1]), target)\". Dynamic proof: an implementation that keeps the provided signature verbatim (review/work/19/step_19.1_literal_header.py) fails 0/3 with \"TypeError: tensor() takes 0 positional arguments but 2 were given\"; the same body under \"def tensor(*args):\" (review/work/19/step_19.1_mine.py) passes 3/3. The gold code itself uses \"def tensor(*args):\", contradicting the published header.",
+      "suggested_fix": "Change function_header to \"def tensor(*args):\". (Same fix as the identical duplicated tensor step in other problems.)"
+    },
+    {
+      "step_number": "19.2",
+      "defect_type": "D8",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "All four h5 targets are exactly 0.0 or ~1.0 (0.9999999999999996, 0.9999999999999996, 0.0, 0.0). Since 0 and 1 are fixed points of x->x^2 and of x->|x|, the tests cannot detect two plausible wrong implementations, both verified to pass 4/4: (a) returning |<psi|sigma_y^n|psi*>| without the final square (review/work/19/step_19.2_nosquare.py), and (b) substituting sigma_x for sigma_y (review/work/19/step_19.2_sigmax.py -- indistinguishable from sigma_y on all four real test states). The prompt does give the formula explicitly, so a competent solver is unlikely to make these errors, but the suite provides zero discrimination against them.",
+      "suggested_fix": "Add one test with a non-extremal tangle, e.g. psi = np.array([0.6, 0, 0, 0.8]) whose n-tangle is (2*0.6*0.8)^2 = 0.9216 (catches the missing square: 0.96), and one real state such as np.array([1,1,1,1])/2 whose sigma_y tangle is 0 but sigma_x value is 1 (catches the wrong Pauli)."
+    }
+  ],
+  "overall_assessment": "Problem 19 is essentially sound: the physics spec in 19.2 is complete (formula, Pauli Y, conjugation all given), the h5 targets are correct, and gold plus an independent literal-reading implementation both pass everything. The one real scoring hazard is the 19.1 function_header 'def tensor():' with no parameters -- a solver that preserves the given signature fails every test, though the docstring's 'args: any number of arrays' makes the intended '*args' inferable, hence major rather than blocker. Secondarily, 19.2's all-{0,1} targets are unconstraining (missing-square and sigma_x variants both pass), a false-positive risk but a minor one given the explicit formula in the background."
+}

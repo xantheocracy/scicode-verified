@@ -1,0 +1,61 @@
+{
+  "problem_id": "34",
+  "split": "test",
+  "reviewer_model": "fable",
+  "steps_reviewed": 3,
+  "steps": [
+    {
+      "step_number": "34.1",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Expert impl passes (rel err 3e-16). Targets pin by-symbol mapping phi_p=0.0259*ln(N_a/n_i), phi_n=0.0259*ln(N_d/n_i) in return order (phi_p, phi_n); swapped order fails. Vt=0.0259 is explicitly pinned in the prompt and required (rtol-dominated: Vt=0.025852 would fail here)."
+    },
+    {
+      "step_number": "34.2",
+      "static_ok": false,
+      "dynamic_status": "pass",
+      "notes": "Expert impl with q=1.6e-19 passes (rel err 3e-16). Prompt's electron-charge constant is corrupted (mantissa missing). Test is atol-dominated: targets ~4e-6 cm vs atol=1e-8 gives a ±0.25% pass band, so even CODATA q or Vt=0.025852 pass THIS step. xn/xp split (xn=xd*N_a/(N_a+N_d)) follows from standard charge neutrality; swapped split fails (diff ~1.9e-6 >> band)."
+    },
+    {
+      "step_number": "34.3",
+      "static_ok": false,
+      "dynamic_status": "pass",
+      "notes": "Expert impl passes ONLY with grid np.arange(-xp, xn+dx, dx) (len = floor((xn+xp)/dx)+2) AND q exactly 1.6e-19. Sign: targets are the conduction-band VALUE, decreasing 0 -> -phi_i (inferable from 'conduction band value' + band-bending physics; positive electrostatic-potential reading fails but is the less defensible reading). Test 0's exact float equality (xn==xp)==True is robust: 3 natural formulations (ratio split, per-side sqrt, xp=xd-xn) all give bit-exact equality for N_a==N_d. Last grid point lies ~0.1-0.6*dx past xn; reference extrapolates the n-side parabola there, but clamping the value to -phi_i also passes tolerances, so only the COUNT is binding."
+    }
+  ],
+  "findings": [
+    {
+      "step_number": "34.2",
+      "defect_type": "D2",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "Step 34.2 prompt: 'The vacuum permittivity is $8.854\\times 10^{-14} F/cm$ and the electron charge is $\\times 10^{-19} C$.' — the mantissa of the electron charge is missing (corrupted text; intended '1.6'). The frozen targets encode exactly q=1.6e-19 (expert impl rel err 3.4e-16). Step 34.2 itself happens to pass with any plausible q because its assertion is atol-dominated (targets ~3.8e-6 cm vs atol=1e-8), BUT step 34.3 — which inherits this constant via 'With the previous two functions' and has O(0.1-0.8 V) targets where rtol=1e-5 binds — officially FAILS for both q=1.602e-19 and CODATA q=1.602176634e-19: steptest 34.3 with q=1.602176634e-19 -> 'RESULT step 34.3: FAIL', AssertionError on test 1 (array values off by ~1.3e-3 relative; shape matches). A solver who fills the corrupted constant with the CODATA value loses step 34.3 despite correct physics.",
+      "suggested_fix": "Restore the constant in the 34.2 prompt: 'the electron charge is $1.6\\times 10^{-19}$ C' (and consider repeating it in the 34.3 docstring, since 34.3 is the step whose score it flips)."
+    },
+    {
+      "step_number": "34.3",
+      "defect_type": "D4",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "Prompt only says 'the potential diagram as an array denoting the conduction band value with 0.1nm space increment dx'; neither endpoint inclusion nor array length is specified, and (xn+xp)/dx is never an integer (e.g. test 2: 1351.589). The frozen target arrays have floor((xn+xp)/dx)+2 points (1353/462/727 for tests 2/1/3), i.e. the authors' grid is np.arange(-xp, xn+dx, dx), whose last point lies ~0.4*dx BEYOND xn (the n-side parabola is extrapolated there: last target value -0.73359575 vs -phi_i=-0.73359596). The equally natural reading np.arange(-xp, xn, dx) gives floor+1 points and officially FAILS: steptest 34.3 -> ValueError 'operands could not be broadcast together with shapes (461,) (462,)'. linspace over [-xp, xn] gives yet another count. A competent solver must coin-flip the endpoint convention; only the +dx overshoot variant passes.",
+      "suggested_fix": "State the grid explicitly in the 34.3 prompt/docstring, e.g. 'use x = np.arange(-x_p, x_n + dx, dx) with dx = 0.1 nm = 1e-8 cm (the last point may extend one step past x_n)', or regenerate the target on an unambiguous grid such as np.arange(0, xn+xp, dx) - xp."
+    },
+    {
+      "step_number": "34.3",
+      "defect_type": "D10",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "The main problem_io and the 34.3 docstring swap the region labels: 'N_a: float, doping concentration in n-type region # cm^{-3}' / 'N_d: float, doping concentration in p-type region' — contradicting the 34.1 and 34.2 docstrings ('N_d: ... n-type region', 'N_a: ... p-type region'), the background formulas (phi_p = kT ln(N_a/n_i)), and the universal acceptor/donor convention. The labels matter physically for the xn/xp split (charge neutrality N_d*x_n = N_a*x_p): a solver who took the swapped labels literally would compute xn = xd*N_d/(N_a+N_d) and fail 34.2/34.3 (diff ~1.9e-6 cm >> tolerance). Targets confirm the standard convention (N_a = acceptor/p-side). A competent solver follows the subscripts a=acceptor/d=donor, so impact is unlikely, hence minor.",
+      "suggested_fix": "Fix the two swapped lines in problem_io and the 34.3 docstring to 'N_a: ... p-type region', 'N_d: ... n-type region', matching 34.1/34.2."
+    },
+    {
+      "step_number": "34.2",
+      "defect_type": "D8",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "Targets are depletion widths in cm (3.77e-6 to 8.25e-6), so np.allclose's default atol=1e-8 dominates rtol*|target| (~4e-11..8e-11): the pass band is +/-1.0e-8 cm = +/-0.24-0.27% relative. Verified to pass: q=1.602176634e-19 (rel err 6.8e-4) and Vt=0.025852 instead of the pinned 0.0259 (rel err ~9e-4). The test still rejects zeros and a swapped (xp, xn) return, so the core physics is constrained, but constant-level errors that step 34.3 punishes go undetected here.",
+      "suggested_fix": "Re-store the targets in um or nm (values O(10-100)) or assert with atol=0 so rtol governs, making 34.2's verdict consistent with 34.3's sensitivity."
+    }
+  ],
+  "overall_assessment": "The physics chain (built-in bias -> depletion widths -> band diagram) is sound and all three steps pass with a careful literal-reading implementation. However, step 34.3 is only solvable by guessing two unstated author choices: the electron charge must be exactly 1.6e-19 C even though the prompt's statement of that constant is textually corrupted ('the electron charge is $\\times 10^{-19} C$'), and the output grid must be np.arange(-xp, xn+dx, dx), which overshoots xn by one point — the equally natural endpoint-exclusive grid fails on array shape. As-is, a competent solver has roughly coin-flip odds on 34.3; 34.1 and 34.2 are fair (34.2 thanks to an atol-dominated, slightly loose tolerance)."
+}

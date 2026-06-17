@@ -1,0 +1,60 @@
+{
+  "problem_id": "75",
+  "split": "test",
+  "verifier_model": "fable",
+  "verdicts": [
+    {
+      "step_number": "75.3",
+      "defect_type": "D2",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "Re-implemented from scratch (review/work/75/verify/). steptest official joint: bespoke hop set (intralayer NN only + interlayer vertical d=6.50 + first diagonal interlayer shell d=7.03 bohr) -> PASS 3/3 (v_step3_matched.py). Natural full converged MK sum (N=8 supercell shells) -> FAIL (Gamma gives [-11.4613,-8.8696,6.8161,6.8894] vs target [-8.9891,-7.1363,7.9225,8.2029]) (v_step3_natural.py). Variant sweep (v_step3_variants.py) against all 3 h5 targets: distance cutoffs d<5/7.5/8.5/10/10.72 bohr all FAIL 3/3; NN+vertical-only FAILS k0,k1 (passes only the K-point +-0.3931); NN+ALL-interlayer FAILS 3/3 (K gives +-0.2702). Verified gencode.py process_problem_steps never includes test_cases in prompts, so the 14-hop list visible in 75.2's test input is hidden from the solver. NEW characterization: the hidden set equals a single rule 'in-plane projected distance < 2.7 bohr (= NN distance a/sqrt(3))' -- my inplane_cutoff<=NN variant passes 3/3 -- but no cutoff of any kind is stated, and the rule keeps 0.178 eV interlayer hops while dropping the larger -0.2698 eV in-plane 2nd-NN hop, so it is not derivable physics. Every natural reading fails; only the authors' undisclosed neighbor list passes.",
+      "fix": {
+        "kind": "prompt_edit",
+        "target_location": "sub_steps[2].step_description_prompt (step 75.3)",
+        "before": "Generate a Hamiltonian matrix at a given $\\mathbf{k}= (k_x, k_y)$. Calculate the eigenvalues and return the sorted list of eigenvalues in ascending order.",
+        "after": "Generate a Hamiltonian matrix at a given $\\mathbf{k}= (k_x, k_y)$ (reduced coordinates). Include only hops whose in-plane projected distance is at most the nearest-neighbor distance $a/\\sqrt{3}$ (i.e. intralayer nearest-neighbor hops, interlayer vertical hops, and interlayer hops with in-plane offset equal to one nearest-neighbor vector); neglect all other hops, including in-plane second-nearest neighbors. The Hamiltonian element is $H_{ij}(\\mathbf{k}) = \\sum_{\\mathbf{R}} t(\\mathbf{d}) e^{i \\mathbf{k}\\cdot\\mathbf{d}}$ with $\\mathbf{d} = \\mathbf{r}_i - (\\mathbf{r}_j + \\mathbf{R})$. Calculate the eigenvalues and return the sorted list of eigenvalues in ascending order.",
+        "side_effects": "None on targets (frozen h5 values already encode exactly this hop set; verified PASS 3/3). general_tests duplicates 75.3's tests and is ignored by scoring. Alternative: regenerate the 3 targets from the full converged MK sum (values computed in v_step3_variants.py), which is cleaner physics but requires h5 surgery."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "75.2",
+      "defect_type": "D4",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "steptest official joint: convention A, d_vec = basis[ai] - (basis[aj] + di*latvecs[0] + dj*latvecs[1]) -> PASS (v_step2_convA.py). Mirror convention B, d_vec = (basis[ai] + R) - basis[aj] -> FAIL (v_step2_convB.py); B yields [-2.6876,-0.0153,-0.0153,...] vs target [-2.6876 x6, 0.3931, 0.1778 x3, 0.3931, 0.1778 x3] (distances 7.101/9.627 bohr instead of 2.684/7.033). Docstring quoted in full defines 'displacement indices' nowhere; step prompt is verbatim truncated: 'using the hopping evaluation from .' Adversarial defense attempted: convention A coincides with the dominant <i,0|H|j,R> convention of Wannier90/PythTB (R attached to second orbital index), which a TB-literate solver might default to -- this softens but does not remove the defect, because the names di/dj actively suggest a per-atom association with ai/aj, the docstring gives zero guidance, and the test inputs are never shown to the model. Severity kept at major: solvable only by guessing the authors' unstated choice, albeit a guess with a field-convention prior.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[1].function_header docstring, lines for di/dj (and ideally sub_steps[1].step_description_prompt truncated sentence)",
+        "before": "        di, dj (np.array): list of displacement indices for the hopping\n        ai, aj (np.array): list of atomic basis indices for the hopping",
+        "after": "        di, dj (np.array): integer unit-cell displacement indices (n1, n2) for each hop: the hop connects atom ai in the home unit cell to atom aj in the cell displaced by n1*latvecs[0] + n2*latvecs[1], i.e. d = basis[ai] - (basis[aj] + n1*latvecs[0] + n2*latvecs[1])\n        ai, aj (np.array): list of atomic basis indices for the hopping",
+        "side_effects": "None: targets unchanged (convention A already encodes this). Also fix the truncated step prompt 'using the hopping evaluation from .' -> 'using the hopping evaluation from step 1 (hopping_mk).' Renaming di,dj to n1,n2 would be cleaner but touches the header signature, so the doc_edit is the minimal fix."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "75.1",
+      "defect_type": "D10",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Exact prompt text quoted from JSON: '$b$ = (b,a.u.)$^{-1}$, $a_0$ = 2.68 b, a.u., $d_0$ = 6.33 b, a.u.' -- the value 1.17 for the decay constant b is indeed absent from the prompt (only its unit survives). Recoverable: function_header default 'b=1.17' plus docstring '1/b is the decay length', and all 3 test cases pass b=1.17 explicitly. Analytic check: literal formula gives -0.26977685426237863 / -2.68756825384355 / 0.043614553586541975, bit-matching all 3 h5 targets; steptest official joint PASS (v_step1.py). Scoring unaffected; cosmetic text corruption only.",
+      "fix": {
+        "kind": "prompt_edit",
+        "target_location": "sub_steps[0].step_description_prompt, final 'using' clause",
+        "before": "$b$ = (b,a.u.)$^{-1}$, $a_0$ = 2.68 b, a.u., $d_0$ = 6.33 b, a.u.",
+        "after": "$b$ = 1.17 Bohr$^{-1}$, $a_0$ = 2.68 Bohr, $d_0$ = 6.33 Bohr (atomic units)",
+        "side_effects": "None: text-only; header defaults and targets already consistent with b=1.17."
+      },
+      "uncertainty_notes": null
+    }
+  ],
+  "missed_defects": [],
+  "summary": "All 3 first-pass findings confirmed at their original severities (1 blocker, 1 major, 1 minor); nothing refuted, no missed defects found (deps clean, signatures consistent, no degenerate targets/seeds/==0). The problem is fixable to fair entirely by text edits, no target regeneration needed: the 75.3 blocker dissolves once the prompt states the hidden hop set (newly characterized here as the single rule 'in-plane projected distance <= NN distance', verified to pass 3/3), and 75.2 needs one docstring sentence defining the (di,dj)=cell-displacement-of-atom-aj convention plus repair of the truncated cross-reference. 75.1 needs only a cosmetic constant fix."
+}

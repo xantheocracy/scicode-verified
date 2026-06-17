@@ -1,0 +1,40 @@
+# ---- large binary data: never commit; rebuilt from scicode_verified/targets/ + original h5 ----
+*.h5
+data.zip
+*.tar.gz
+
+# ---- upstream SciCode benchmark: clone separately (see README); it carries the 1GB original
+#      h5 and third-party result dumps that may contain credentials ----
+/SciCode/
+
+# ---- superseded / historical build artifacts ----
+/legacy/
+/eval_clean/build_h5.py
+/eval_clean/build_h5_round2.py
+
+# ---- run outputs & analysis scratch (process files, not part of the release) ----
+/eval_clean/ds_runs/
+/eval_clean/trap_check_64/
+/eval_clean/verify60/
+/eval_clean/_*.json
+/review/work/
+/review/logs/
+/tmp_log/
+/tmp_classify/
+/logs/
+out2.txt
+out_pro2.txt
+
+# ---- root-level ad-hoc scratch scripts ----
+/.t3_flash.py
+/tf.py
+/tf3.py
+/tp3.py
+/test_each.py
+/test_one.py
+
+# ---- local agent / editor / python caches ----
+/.claude/
+__pycache__/
+*.pyc
+.DS_Store

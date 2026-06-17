@@ -1,0 +1,30 @@
+{
+  "problem_name": "IncomChol",
+  "problem_id": "4",
+  "problem_description_main": "Create a function to compute the incomplete Cholesky factorization of an input matrix.",
+  "problem_background_main": "Background:\nAn incomplete Cholesky factorization provides a sparse approximation of the Cholesky factorization for a symmetric positive definite matrix. This factorization is commonly employed as a preconditioner for iterative algorithms such as the conjugate gradient method.\n\nIn the Cholesky factorization of a positive definite matrix $A$, we have $A = LL*$, where $L$ is a lower triangular matrix. The incomplete Cholesky factorization yields a sparse lower triangular matrix $K$ that closely approximates $L$. The corresponding preconditioner is $KK*$.\n\nA popular approach to find the matrix $K$ is to adapt the algorithm for the exact Cholesky decomposition, ensuring that $K$ retains the same sparsity pattern as $A$ (any zero entry in $A$ leads to a zero entry in $K$). This method produces an incomplete Cholesky factorization that is as sparse as matrix $A$.\n\nFor $i$ from $1$ to $N$ :\n$$\nL_{i i}=\\left(a_{i i}-\\sum_{k=1}^{i-1} L_{i k}^2\\right)^{\\frac{1}{2}}\n$$\n\nFor $j$ from $i+1$ to $N$ :\n$$\nL_{j i}=\\frac{1}{L_{i i}}\\left(a_{j i}-\\sum_{k=1}^{i-1} L_{i k} L_{j k}\\right)\n$$",
+  "problem_io": "\"\"\"\nInputs:\nA : Matrix, 2d array M * M\n\nOutputs:\nA : Matrix, 2d array M * M\n\"\"\"",
+  "required_dependencies": "import numpy as np",
+  "sub_steps": [
+    {
+      "step_number": "4.1",
+      "step_description_prompt": "Create a function to compute the incomplete Cholesky factorization of an input matrix.",
+      "step_background": "Background:\nAn incomplete Cholesky factorization provides a sparse approximation of the Cholesky factorization for a symmetric positive definite matrix. This factorization is commonly employed as a preconditioner for iterative algorithms such as the conjugate gradient method.\n\nIn the Cholesky factorization of a positive definite matrix $A$, we have $A = LL*$, where $L$ is a lower triangular matrix. The incomplete Cholesky factorization yields a sparse lower triangular matrix $K$ that closely approximates $L$. The corresponding preconditioner is $KK*$.\n\nA popular approach to find the matrix $K$ is to adapt the algorithm for the exact Cholesky decomposition, ensuring that $K$ retains the same sparsity pattern as $A$ (any zero entry in $A$ leads to a zero entry in $K$). This method produces an incomplete Cholesky factorization that is as sparse as matrix $A$.\n\nFor $i$ from $1$ to $N$ :\n$$\nL_{i i}=\\left(a_{i i}-\\sum_{k=1}^{i-1} L_{i k}^2\\right)^{\\frac{1}{2}}\n$$\n\nFor $j$ from $i+1$ to $N$ :\n$$\nL_{j i}=\\frac{1}{L_{i i}}\\left(a_{j i}-\\sum_{k=1}^{i-1} L_{i k} L_{j k}\\right)\n$$",
+      "ground_truth_code": "def ichol(A):\n    \"\"\"\n    Inputs:\n    A : Matrix, 2d array M * M\n    Outputs:\n    A : Matrix, 2d array M * M\n    \"\"\"\n    nrow = A.shape[0]\n    for k in range(nrow):\n        A[k, k] = np.sqrt(A[k, k])\n        for i in range(k+1, nrow):\n            if A[i, k] != 0:\n                A[i, k] = A[i, k] / A[k, k]\n        for j in range(k+1, nrow):\n            for i in range(j, nrow):\n                if A[i, j] != 0:\n                    A[i, j] = A[i, j] - A[i, k]*A[j, k]\n    for i in range(nrow):\n        for j in range(i+1, nrow):\n            A[i, j] = 0\n    return A",
+      "function_header": "def ichol(A):\n    '''Inputs:\n    A : Matrix, 2d array M * M\n    Outputs:\n    A : Matrix, 2d array M * M\n    '''",
+      "test_cases": [
+        "n = 7\nh = 1.0/n\ndiagonal = [2/h for i in range(n)]\ndiagonal_up = [-1/h for i in range(n-1)]\ndiagonal_down = [-1/h for i in range(n-1)]\nA = np.diag(diagonal) + np.diag(diagonal_up, 1) + np.diag(diagonal_down, -1)\nassert np.allclose(ichol(A), target)",
+        "n = 7\nh = 1.0/n\ndiagonal = [1/h for i in range(n)]\ndiagonal_up = [-0.1/h for i in range(n-1)]\ndiagonal_down = [-0.1/h for i in range(n-1)]\nA = np.diag(diagonal) + np.diag(diagonal_up, 1) + np.diag(diagonal_down, -1)\nassert np.allclose(ichol(A), target)",
+        "n = 7\nh = 1.0/n\ndiagonal = [2/h for i in range(n)]\ndiagonal_up = [-0.3/h for i in range(n-2)]\ndiagonal_down = [-0.3/h for i in range(n-2)]\nA = np.diag(diagonal) + np.diag(diagonal_up, 2) + np.diag(diagonal_down, -2)\nassert np.allclose(ichol(A), target)"
+      ],
+      "return_line": "    return A"
+    }
+  ],
+  "general_solution": "def ichol(A):\n    \"\"\"\n    Inputs:\n    A : Matrix, 2d array M * M\n    Outputs:\n    A : Matrix, 2d array M * M\n    \"\"\"\n    nrow = A.shape[0]\n    for k in range(nrow):\n        A[k, k] = np.sqrt(A[k, k])\n        for i in range(k+1, nrow):\n            if A[i, k] != 0:\n                A[i, k] = A[i, k] / A[k, k]\n        for j in range(k+1, nrow):\n            for i in range(j, nrow):\n                if A[i, j] != 0:\n                    A[i, j] = A[i, j] - A[i, k]*A[j, k]\n    for i in range(nrow):\n        for j in range(i+1, nrow):\n            A[i, j] = 0\n    return A",
+  "general_tests": [
+    "n = 7\nh = 1.0/n\ndiagonal = [2/h for i in range(n)]\ndiagonal_up = [-1/h for i in range(n-1)]\ndiagonal_down = [-1/h for i in range(n-1)]\nA = np.diag(diagonal) + np.diag(diagonal_up, 1) + np.diag(diagonal_down, -1)\nassert np.allclose(ichol(A), target)",
+    "n = 7\nh = 1.0/n\ndiagonal = [1/h for i in range(n)]\ndiagonal_up = [-0.1/h for i in range(n-1)]\ndiagonal_down = [-0.1/h for i in range(n-1)]\nA = np.diag(diagonal) + np.diag(diagonal_up, 1) + np.diag(diagonal_down, -1)\nassert np.allclose(ichol(A), target)",
+    "n = 7\nh = 1.0/n\ndiagonal = [2/h for i in range(n)]\ndiagonal_up = [-0.3/h for i in range(n-2)]\ndiagonal_down = [-0.3/h for i in range(n-2)]\nA = np.diag(diagonal) + np.diag(diagonal_up, 2) + np.diag(diagonal_down, -2)\nassert np.allclose(ichol(A), target)"
+  ],
+  "split": "dev"
+}

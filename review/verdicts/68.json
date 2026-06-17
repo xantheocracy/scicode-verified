@@ -1,0 +1,161 @@
+{
+  "problem_id": "68",
+  "split": "test",
+  "verifier_model": "fable",
+  "verdicts": [
+    {
+      "step_number": "68.3",
+      "defect_type": "D6",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "Re-ran the six test bodies myself (review/work/68/verify, inline script): product-form Slater.value = np.prod(np.exp(-alpha*r), axis=1) reproduces ALL 6 h5 targets bit-exactly (e.g. test6 rmse=1.629328e-03 == target); the mathematically identical np.exp(-alpha*np.sum(r, axis=1)) passes gradient tests 1-3 but fails laplacian tests 4-6 (rmse 1.948873e-07 vs target 1.158734e-07; 3.521678e-05 vs 1.484328e-05; 3.150684e-03 vs 1.629328e-03 - factor ~2, hopeless under rtol 1e-5). Official steptest: v_expsum.py -> 68.1 PASS, 68.3 FAIL (joint); impl_full.py (product form) -> 68.3 PASS. The laplacian targets are second-difference roundoff noise (eps/delta^2 amplification up to 1e12 at delta=1e-6), i.e. they encode the author's floating-point evaluation order of Slater.value chosen in step 68.1, where both forms pass.",
+      "fix": {
+        "kind": "tolerance_change",
+        "target_location": "sub_steps[2].test_cases[3..5] (the three test_laplacian cases) and h5 group 68.3 targets 4-6",
+        "before": "np.random.seed(0)\nassert np.allclose(test_laplacian(\n    np.random.randn(5, 2, 3),\n    MultiplyWF(Slater(alpha=2.0), Jastrow(beta=0.5)),\n    1e-4\n), target)",
+        "after": "np.random.seed(0)\nassert test_laplacian(\n    np.random.randn(5, 2, 3),\n    MultiplyWF(Slater(alpha=2.0), Jastrow(beta=0.5)),\n    1e-4\n) < 1e-2   # threshold assert: numeric-vs-analytic agreement, not the frozen noise value (apply analogously to the delta=1e-5 and delta=1e-6 cases; gradient tests 1-3 may keep frozen targets or use rmse < 1e-3)",
+        "side_effects": "Targets 4-6 in h5 become unused (or set target=True if the harness requires an h5 entry per test). No other step consumes test_laplacian. Alternative cheaper-but-uglier fix: prompt_edit in 68.1 mandating 'value must be computed as np.prod(np.exp(-alpha*r), axis=1)'."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "68.5",
+      "defect_type": "D5",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "Canonical textbook implementation (accept where acc > u, identical RNG consumption: chi normal then nconf uniforms per step) -> 'RESULT step 68.5: FAIL' (official joint, review/work/68/impl_full.py). HOWEVER the first pass's central evidence claim is WRONG: the target IS reproducible from the published test code. 68.5's three h5 targets are bit-identical to 46.3's (verified np.array_equal on all 3), and the gold idiom found in the problem-46 verification - accept where `acc + u > 1.0` (statistically equivalent, trajectory-divergent) - passes: review/work/68/verify/v_goldidiom.py -> 'RESULT step 68.5: PASS'. So no target regeneration is needed; the defect stands at blocker because nothing in prompt/background/docstring hints at the a+u>1 comparison and the canonical rule fails all 3 tests, but the fix is a cheap prompt_edit, not the first pass's proposed regen.",
+      "fix": {
+        "kind": "prompt_edit",
+        "target_location": "sub_steps[4].step_background (append after the acceptance-probability equation)",
+        "before": "Accept the proposed move with the acceptance probability\n\n\\begin{align}\na &= \\frac{|\\psi(\\mathbf{r}^{\\prime})|^2}{|\\psi(\\mathbf{r})|^2}.\n\\end{align}",
+        "after": "Accept the proposed move with the acceptance probability\n\n\\begin{align}\na &= \\frac{|\\psi(\\mathbf{r}^{\\prime})|^2}{|\\psi(\\mathbf{r})|^2}.\n\\end{align}\n\nFor reproducibility, implement each step exactly as follows (legacy global numpy RNG, all-electron moves): draw `chi = np.random.normal(size=configs.shape)`; propose `posnew = poscur + np.sqrt(tau)*chi`; compute `a = wf.value(posnew)**2 / wf.value(poscur)**2`; draw `u = np.random.random(nconf)`; accept the configurations where `a + u > 1.0` (equivalent in distribution to u < a), updating accepted positions and cached wave-function values.",
+        "side_effects": "Frozen 68.5 targets become derivable as-is. Identical to the fix already recorded for 46.3 (same targets) - apply both together. Also required by the 68.8 fix below (run_dmc's warmup calls this metropolis)."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "68.5",
+      "defect_type": "D10",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Static check of review/problems/68.json sub_steps[4]: function_header docstring says 'wf (wavefunction object):  MultiplyWF class' while all three test cases construct 'wf = Slater(alpha=1)'. Harmless for any implementation using only wf.value (all reasonable ones do); cannot flip a score. Minor upheld.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[4].function_header docstring Args",
+        "before": "wf (wavefunction object):  MultiplyWF class",
+        "after": "wf (wavefunction object): any wavefunction-like object exposing value(configs) (tests pass Slater)",
+        "side_effects": "None; doc-only."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "68.6",
+      "defect_type": "D10",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "Computed drift_new / wf.gradient(configs_new) elementwise on the actual test inputs: all six components = 0.02 exactly (drift_old/grad_old likewise ~0.02), i.e. drift_new IS pre-multiplied by dtau=0.02 (even in tests 2-3 where dtau=0.01/0.005 is passed), contradicting the docstring 'drift_new: gradient calculated on new configs' (no dtau) vs 'drift_old: ... multiplied by dtau'. Dynamic: v_drift_doc.py (docstring-literal, multiplies drift_new by dtau inside) -> 'RESULT step 68.6: FAIL' (official joint); symmetric treatment (impl_full.py) -> PASS reproducing targets [0.99976697, 2.59191777, 17.42071956]. A solver following the docstring exactly cannot pass; major upheld.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[5].function_header docstring Args",
+        "before": "drift_new (np.array): gradient calculated on new configs (nconf, nelec, ndim)",
+        "after": "drift_new (np.array): gradient calculated on new configs multiplied by dtau (nconf, nelec, ndim)",
+        "side_effects": "None to targets (they already encode the symmetric reading). The tests-2/3 inconsistency (drifts built with 0.02 while dtau=0.01/0.005 passed) remains a cosmetic out-of-contract smell but is harmless once drifts are treated as opaque inputs."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "68.6",
+      "defect_type": "D4",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "medium",
+      "reproduction": "h5 targets for tests 2-3 are 2.59191777 and 17.42071956 (> 1), so the RAW Metropolis-Hastings quotient is required; v_minratio.py (return min(1, ratio), the equally standard acceptance-PROBABILITY convention) -> 'RESULT step 68.6: FAIL' (official joint). Adversarial reading checked: the name 'acceptance_ratio' and 68.5's background using an uncapped quotient weakly lean raw, but neither pins it, both conventions are textbook-standard, and the first pass's record of GPT-5's proxy returning min(1,.) shows real solvers take the other branch. Major upheld at medium confidence (a careful solver might infer 'ratio' = uncapped).",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[5].function_header docstring Returns",
+        "before": "Returns:\n        acceptance_ratio (nconf,):",
+        "after": "Returns:\n        acceptance_ratio (nconf,): the raw ratio exp((|configs_new-configs_old-drift_old|^2 - |configs_old-configs_new-drift_new|^2)/(2*dtau)) * (psi(configs_new)/psi(configs_old))^2; may exceed 1 - do NOT cap with min(1, .)",
+        "side_effects": "None; doc-only. Consistent with 68.8's gold loop, which compares the raw ratio against a uniform (min(1,.) > u is decision-identical there)."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "68.7",
+      "defect_type": "D4",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "step_background is the empty string and the prompt names no resampling algorithm. My multinomial impl np.random.choice(nconfig, nconfig, p=w/sum(w)) (impl_full.py) -> 68.7 PASS, reproducing target [5 7 6 5 4 6 4 8 9 3]; my systematic/comb resampler (v_branch_comb.py, the standard low-variance DMC branching scheme) -> 'RESULT step 68.7: FAIL' (official joint). Targets thus pin one specific algorithm+RNG path. Mitigating note: np.random.choice with p is internally cumsum+searchsorted over nconfig uniforms, so any hand-rolled inverse-CDF multinomial sampler drawing nconfig uniforms in one call also matches - the passing class is broader than 'that one numpy call' - but comb/residual schemes are at least as standard in DMC, so major stands.",
+      "fix": {
+        "kind": "prompt_edit",
+        "target_location": "sub_steps[6].step_description_prompt (append)",
+        "before": "The number of configurations should remain the same (meaning some configurations can be chosen more than once).",
+        "after": "The number of configurations should remain the same (meaning some configurations can be chosen more than once). Sample the nconfig new indices independently with replacement, with probability proportional to weight, via np.random.choice(nconfig, nconfig, p=weight/np.sum(weight)) (do not use systematic/comb or residual resampling).",
+        "side_effects": "Frozen 68.7 targets become derivable; 68.8's gold loop calls this branch, so the wording must stay consistent with the 68.8 fix."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "68.7",
+      "defect_type": "D8",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "h5 dump: all three targets are the identical vector [5 7 6 5 4 6 4 8 9 3] despite three different weight inputs (all weights within ~1.5% of 1.0; seed reset to 0 in each test). v_branch_ignore.py (ignores weights entirely: p=uniform) -> 'RESULT step 68.7: PASS' (official joint). The tests have zero power against the central correctness property (weight-proportional selection); a weight-blind resampler scores full credit. Major upheld.",
+      "fix": {
+        "kind": "test_edit",
+        "target_location": "sub_steps[6].test_cases[2] (third test) and h5 group 68.7/target3",
+        "before": "np.random.seed(0)\nassert np.allclose(branch([0.98836047, 0.98309443, 0.99227105, 1.00620314, 0.9898906,  0.98667342, 0.98365538, 0.98601126, 1.00460268, 1.00441958]), target)",
+        "after": "np.random.seed(0)\nassert np.allclose(branch([0.1, 3.0, 1.0, 0.05, 2.0, 0.5, 1.5, 0.2, 4.0, 0.8]), target)",
+        "regen_recipe": "import numpy as np; np.random.seed(0); w=np.array([0.1,3.0,1.0,0.05,2.0,0.5,1.5,0.2,4.0,0.8]); print(np.random.choice(10,10,p=w/np.sum(w)))  -> regenerated target = [6 8 6 6 4 8 4 8 9 4] (computed under numpy 2.2.6)",
+        "side_effects": "h5 68.7 target 3 must be regenerated (recipe above). Tests 1-2 keep their frozen targets. After this edit the weight-blind impl fails test 3 (verified: uniform-p choice under seed 0 gives [5 7 6 5 4 6 4 8 9 3] != [6 8 6 6 4 8 4 8 9 4])."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "68.8",
+      "defect_type": "D5",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "Canonical documented-algorithm impl (impl_full.py) -> 'RESULT step 68.8: FAIL' (official joint); its test 5 (statistical boolean) passes in isolation (steptest --test 5 --isolate: 1/1). Undocumented-warmup claim verified quantitatively: raw initial population mean local energy = -1.27123 vs target0[0] = -0.03445905 - unreachable by the documented algorithm under any RNG luck. DECISIVE NEW RESULT the first pass missed: I CRACKED the full gold recipe and reproduced ALL targets - run_dmc internally first equilibrates with metropolis(configs, wf, tau=0.5, nsteps=2000) using the a+u>1.0 idiom, then per step: chi=np.random.normal(size=pos.shape); drift_old=tau*grad(pos); posnew=pos+sqrt(tau)*chi+drift_old; drift_new=tau*grad(posnew); acc=get_acceptance_ratio(...); u=np.random.random(nconf); accept where acc>u (plain >, NOT a+u>1 here); elocnew=kinetic+potential; weight=exp(-tau*((eloc+elocnew)/2-e_t)); RECORD np.mean(elocnew) BEFORE branching; idx=branch(weight); pos,eloc<-[idx]; e_t-=log(mean(weight)). Trajectory match on tests 1-3: max abs diff 6.9e-18 / 4.4e-16 / 2.8e-17 (review/work/68/verify/full_88.py), and the assembled solution review/work/68/verify/v_dmc_gold.py -> 'RESULT step 68.8: PASS' (official joint, all 5 tests). Also established: the E_T init/update convention is provably irrelevant to the recorded energies (e_t enters weights only as a multiplicative constant, cancelling in branch probabilities; energies never use w), so the first pass's E_T-convention worry was moot. Blocker upheld - the warmup (never mentioned in the prompt) plus three unguessable conventions make the step unsolvable as written - but the targets are NOT corrupt and need NO regeneration.",
+      "fix": {
+        "kind": "prompt_edit",
+        "target_location": "sub_steps[7].step_description_prompt (append; with sub_steps[4]'s a+u>1 fix as prerequisite)",
+        "before": "Write a Python function that performs diffusion Monte Carlo, using the following definition of configuration weights and the acceptance ratio from `get_acceptance_ratio` function and branching from `branch` function. Set the weights for all configurations to the average weight after branching.",
+        "after": "Write a Python function that performs diffusion Monte Carlo, using the following definition of configuration weights and the acceptance ratio from `get_acceptance_ratio` function and branching from `branch` function. Set the weights for all configurations to the average weight after branching. For reproducibility, proceed exactly as follows: first equilibrate the walkers with pos = metropolis(configs, wf, tau=0.5, nsteps=2000) (the function from the earlier step); compute local energies eloc = wf.kinetic(pos) + ham.potential(pos) and initialize E_T = np.mean(eloc). Then for each of the nstep iterations: (1) chi = np.random.normal(size=pos.shape); (2) drift_old = tau*wf.gradient(pos), posnew = pos + np.sqrt(tau)*chi + drift_old, drift_new = tau*wf.gradient(posnew); (3) acc = get_acceptance_ratio(pos, posnew, drift_old, drift_new, tau, wf), u = np.random.random(nconf), accept the walkers where acc > u; (4) recompute elocnew on the updated positions; (5) weight = np.exp(-tau*((eloc + elocnew)/2 - E_T)); (6) append np.mean(elocnew) to the returned energies BEFORE branching; (7) idx = branch(weight), keep pos[idx] and eloc = elocnew[idx]; (8) E_T = E_T - np.log(np.mean(weight)).",
+        "side_effects": "Makes all 5 frozen 68.8 targets derivable (verified end-to-end PASS). Requires the 68.5 prompt fix (a+u>1 idiom) since the warmup reuses metropolis; also consistent with the 68.6 (raw ratio) and 68.7 (np.random.choice) fixes. Alternative (scientifically cleaner, heavier): drop bit-exact tests 1-4 and keep only test-5-style statistical asserts - then no recipe pinning is needed."
+      },
+      "uncertainty_notes": null
+    }
+  ],
+  "missed_defects": [
+    {
+      "step_number": "68.5",
+      "defect_type": "D10",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "step_description_prompt promises a parameter the header doesn't have: 'Write a Python function that performs Metropolis algorithms given the electron positions `configs`, a WaveFunction object `wf`, and a Hamiltonian object `hamiltonian`, using timestep `tau=0.01`...' while function_header is 'def metropolis(configs, wf, tau=0.01, nsteps=2000):' with no hamiltonian (and the algorithm needs none). Tests follow the header, so doc-only; same defect was filed on the twin step 46.3 but missed here.",
+      "fix": {
+        "kind": "prompt_edit",
+        "target_location": "sub_steps[4].step_description_prompt",
+        "before": "given the electron positions `configs`, a WaveFunction object `wf`, and a Hamiltonian object `hamiltonian`, using timestep `tau=0.01`",
+        "after": "given the electron positions `configs` and a WaveFunction object `wf`, using timestep `tau=0.01`",
+        "side_effects": "None; doc-only."
+      }
+    }
+  ],
+  "summary": "All 8 first-pass findings confirmed at their original severities (2 blockers, 5 major, 1 minor), each reproduced with my own implementations under official joint scoring; one minor prose/header mismatch in 68.5 added as a missed defect. Crucially, the first pass's irreproducibility evidence for both blockers was wrong: 68.5's targets are bit-identical to 46.3's and pass with the a+u>1.0 gold idiom, and I cracked 68.8's full recipe (metropolis warmup at tau=0.5/nsteps=2000 + acc>u drift-DMC recording mean(elocnew) pre-branch), reproducing every target to 1e-16 and an official PASS - so the problem is fixable to fair with prompt/doc edits alone plus one optional test-strength regen (68.7 test 3); no blocker requires target regeneration. Effort: low-moderate (seven text edits, one single-value h5 regen), though the recipe-pinning fixes trade scientific generality for reproducibility; the cleaner alternative (statistical asserts for 68.5/68.8) costs target redesign."
+}

@@ -1,0 +1,115 @@
+{
+  "problem_id": "70",
+  "split": "dev",
+  "reviewer_model": "fable",
+  "steps_reviewed": 8,
+  "steps": [
+    {
+      "step_number": "70.1",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Gold passes; independent np-based impl passes. Tests feed complex inputs (1/cmath.sqrt(2)) vs 'float' docstring (see D4 finding); docstring says output 'array of floats' but matrix is complex; test variable names s13/s23 swapped vs header slots (see D1 finding)."
+    },
+    {
+      "step_number": "70.2",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Gold passes. Formula H = 0.5 U diag(0,D21,D31) U^dag fully given. Same s13/s23 name swap in test calls (target-consistent)."
+    },
+    {
+      "step_number": "70.3",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Gold passes. All eight h_k formulas explicitly tabulated in background; no ambiguity."
+    },
+    {
+      "step_number": "70.4",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Gold passes. d_ijk trace formula given; 1-based indices 1..8 explicitly stated; targets nonzero (-1/sqrt3, 1/2, -1/(2sqrt3))."
+    },
+    {
+      "step_number": "70.5",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Gold passes. Targets for tests 1-2 are 0 and -5.6e-9, both below np.allclose atol=1e-8 -> only test 3 (-1.616e-7, ~7% slack) constrains anything (see D8 finding)."
+    },
+    {
+      "step_number": "70.6",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Gold passes. cos(chi) is -0.963/-0.997 in all scenarios, safely inside [-1,1] (no arccos fragility). Targets of tests 0 and 1 are numerically identical (invariants depend only on D21/D31, not angles) - mathematically meaningful, not flagged. <h> output element below atol in all tests (see D8 finding)."
+    },
+    {
+      "step_number": "70.7",
+      "static_ok": false,
+      "dynamic_status": "pass",
+      "notes": "Gold passes, BUT the background's displayed closed-form for u_k omits a factor i relative to the trace definition u_k=-(i/2)Tr(lambda^k U3) given three lines earlier in the same background; the h5 target encodes the i-included version (see D10 finding). Verbatim implementation of the displayed formula FAILS officially; adding 1j makes it PASS."
+    },
+    {
+      "step_number": "70.8",
+      "static_ok": true,
+      "dynamic_status": "fail",
+      "notes": "GOLD ITSELF FAILS test 4 on the current environment (numpy 2.2.6): max abs deviation 1.79e-4 vs frozen target (needs rtol~1e-3). Tests 1-3 pass. Two independent correct implementations (SU(3) reconstruction with numpy; direct eigh evolution operator) also fail only test 4. Phases L*psi_m ~ 6.6e9-1.38e10 radians (>1e9 oscillation cycles) amplify ulp-level roundoff differences into 1e-4 probability shifts."
+    }
+  ],
+  "findings": [
+    {
+      "step_number": "70.7",
+      "defect_type": "D10",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "The step background states both u_k = -(i/2) Tr(lambda^k U3) AND, as the final boxed result a solver is expected to implement, 'u_k = sum_{m=1}^3 e^{i L psi_m} (psi_m h_k - (h*h)_k) / (3 psi_m^2 - |h|^2)'. These contradict each other by a factor of i. Numerical check vs the definitional u_k = -(i/2)Tr(lambda^k expm(-i h.lambda L)): the displayed closed-form gives u_k off by exactly a factor i (e.g. test 0: displayed formula -> 1.799e-08+2.417e-04j, target/definition -> -2.417e-04+1.799e-08j), and the U3 = u0*I + i u_k lambda^k built from the displayed-formula u_k is not unitary (||U U^dag - I|| = 4.8e-4 vs 6e-15 for the corrected one). The h5 target and the gold code both include the extra 1j (gold line: 'uk = [1.j*sum([psi_exp[m]*(psi[m]*h[k]-star_product(k+1,h))/(3.*psi[m]*psi[m]-h2) ...'). Dynamic proof: steptest 70.7 with the displayed formula implemented verbatim -> FAIL (official joint); identical code with the 1j factor -> PASS (files review/work/70/step7_verbatim_formula.py / step7_with_i.py). The factor i is present in the source paper (NuOscProbExact, arXiv:1904.12391) and was dropped when transcribing the background. Under cumulative scoring this also sinks the same solver's 70.8.",
+      "suggested_fix": "In 70.7's background, correct the closed form to u_k = i * sum_{m=1}^3 e^{i L psi_m} (psi_m h_k - (h*h)_k) / (3 psi_m^2 - |h|^2), matching the trace definition, the source paper, and the frozen target."
+    },
+    {
+      "step_number": "70.8",
+      "defect_type": "D6",
+      "severity": "blocker",
+      "confidence": "high",
+      "evidence": "KNOWN defect verified and sharpened. Test 4: H scaled by 1e-9, L = 1.611792e+22 -> phases L*psi_m = {1.38e10, 6.6e9, 7.2e9} radians (~2.2e9 full oscillation cycles), so ulp-level differences in h_k/psi_m amplify to ~1e-4 shifts in probabilities. On numpy 2.2.6 the GOLD REFERENCE CODE ITSELF fails the frozen target: max abs diff 1.79e-4 (target 0.41093749 vs gold 0.41075835), needs rtol~1e-3 while np.allclose default gives tol~4e-6. Two independent algebraically-correct implementations (numpy SU(3) reconstruction, direct eigh expm) fail test 4 identically while passing tests 1-3. Official joint scoring runs all 4 asserts in one script, so step 70.8 currently scores FAIL for every possible solution.",
+      "suggested_fix": "Either regenerate the test-4 target on the current environment AND loosen its comparison to rtol=1e-3 (the physically meaningful precision given 1e10-radian phases), or replace test 4 with a baseline giving phases of O(1-100) radians."
+    },
+    {
+      "step_number": "70.1",
+      "defect_type": "D1",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "Header order is pmns_mixing_matrix(s12, s23, s13, dCP) but every test (and every downstream test of 70.2-70.3, 70.5-70.8 via hamiltonian_3nu(s12, s23, s13, ...)) defines variables named s12, s13, s23 and calls f(s12, s13, s23, ...) - i.e. the value named s13 lands in the s23 parameter slot and vice versa. The swap matters numerically (pmns(s12, 0.2, 0.707, 0) != pmns(s12, 0.707, 0.2, 0)) and the frozen target matches the as-written swapped call, not the name-respecting one. Scoring is therefore consistent (gold passes), but the tests do not exercise the physics scenario their variable names claim (e.g. '_s13_ = 1', maximal theta13, is actually fed to the theta23 slot), and the misleading names are a maintenance hazard if tests/targets are ever regenerated independently.",
+      "suggested_fix": "Rename the test variables (or reorder the call) so names match the header slots: pmns_mixing_matrix(s12, s23, s13, dCP); regenerate targets if the intended scenarios are restored."
+    },
+    {
+      "step_number": "70.1",
+      "defect_type": "D4",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "Docstring contract: 's12 : Sin(theta_12); float' (same for s23, s13), but every test feeds complex inputs: 's12 = 1/cmath.sqrt(2)' -> type complex (0.7071067811865475+0j). An implementation honoring the float contract with the math module crashes on all tests: math.sqrt(1 - s12**2) -> TypeError: must be real number, not complex (likewise math.asin/math.acos). np.sqrt/cmath.sqrt paths work. Mitigated by the prompt instruction 'Express all values as complex numbers' and the cmath import in required_dependencies, so a careful solver survives, but the inputs are out of the documented contract. Same preamble pattern feeds 70.2's header.",
+      "suggested_fix": "Use real literals in test preambles (1/math.sqrt(2) or 0.7071067811865475), or change the docstring contract to 'float or complex'."
+    },
+    {
+      "step_number": "70.1",
+      "defect_type": "D10",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "Docstring output spec: 'pmns: numpy array of floats with shape (3,3)' while the prompt demands 'Express all values as complex numbers' and the matrix necessarily contains s13*e^{-i delta_CP} terms; the frozen target is complex128. A float array is impossible for dCP != 0 (test 3 uses dCP=1).",
+      "suggested_fix": "Change docstring to 'numpy array of complex numbers with shape (3,3)'."
+    },
+    {
+      "step_number": "70.5",
+      "defect_type": "D8",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "Targets: test 1 -> 0+0j exactly, test 2 -> -5.598e-09 (below np.allclose atol=1e-8), test 3 -> -1.616e-07. Dynamic probe: 'def star_product(i, h): return 0.0' passes tests 1 and 2, failing only test 3 (steptest isolated: 2/3 pass). The step as a whole still rejects the trivial implementation thanks to test 3, but 2 of 3 tests constrain nothing, and test 3 only constrains a single scalar to ~7% relative slack (tol 1.0e-8 vs |target| 1.6e-7).",
+      "suggested_fix": "Add a test with O(1)-scale coefficients h (e.g. h = [1,2,...,8]) so the star product is far above atol, or scale D21/D31 up in the existing tests."
+    },
+    {
+      "step_number": "70.6",
+      "defect_type": "D8",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "The second documented output, the SU(3) invariant <h> = d_ijk h^i h^j h^k, is below np.allclose atol=1e-8 in ALL three targets (1.161e-11, 1.161e-11, 1.451e-09), so that element of the returned triple is never actually verified. Dynamic probe: an implementation returning [h2, 0.0, psi_list] (correct chi used internally, but <h> output replaced by 0) PASSES official joint scoring (review/work/70/step6_wrong_h3_zero.py). The psi_m values (~3e-4, above tol) do constrain chi, so the internal computation is checked, but the returned invariant itself is a free-for-all.",
+      "suggested_fix": "Add a test with O(1) coefficients so <h> is well above atol, or compare with atol=0."
+    }
+  ],
+  "overall_assessment": "Steps 70.1-70.6 are fair and well-specified (gold and independent implementations pass), with only minor test-hygiene issues: an s13/s23 variable-name swap baked consistently into tests and targets, complex test inputs against a float docstring contract, and sub-atol targets that leave 70.5 (2 of 3 tests) and 70.6's <h> output unconstrained. Two serious defects: (1) NEW - step 70.7's background displays the Sylvester closed-form for u_k missing a factor of i relative to its own trace definition and the frozen target; a solver implementing the displayed formula verbatim fails 70.7 (and consequently 70.8), and recovery requires noticing the internal contradiction and rederiving - major. (2) KNOWN, verified and sharpened - 70.8 test 4 puts ~1.4e10 radians of phase into the comparison; on numpy 2.2.6 even the gold reference misses the frozen target by 1.8e-4 (vs allclose tol ~4e-6), so step 70.8 is currently unpassable by ANY implementation - blocker. As-is, 70.8 mis-scores everyone and 70.7 mis-scores anyone who trusts the printed formula."
+}

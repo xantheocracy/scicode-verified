@@ -1,0 +1,171 @@
+{
+  "problem_id": "73",
+  "split": "test",
+  "verifier_model": "fable",
+  "verdicts": [
+    {
+      "step_number": "73.1",
+      "defect_type": "D7",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "Wrote my own textbook Busing-Levy B (columns=b_i, x*//a*, z*//a*xb*, a_i.b_j=delta_ij) -> steptest 73.1 FAIL (all 3 tests; test 3 max diff 0.044 vs target). Wrote my own inv(A) variant (A = direct-lattice columns, a//x, b in xy) -> steptest 73.1 PASS, and bit-comparison vs h5: test1/test2 max|diff| = 0.0 (bit-exact), test3 1.8e-20. Target[0,0] = 0.18549537467283253 = 1/a exactly, whereas |a*| = 0.18550273 (test 1); in test 3 target[0,0]=1/a=0.282523 vs a*=0.326559. Adversarial check: under NO reading does the target satisfy the stated frame: its columns are not reciprocal vectors (col0=(1/a,0,0) is not perpendicular to b,c), and as a row-convention matrix its frame is x//a (direct), contradicting the explicit 'x_hat^* // a_hat^*'. The Busing-Levy matrix is the unique matrix satisfying the prompt; the frozen target is a different matrix.",
+      "fix": {
+        "kind": "target_regen",
+        "target_location": "h5 group '73.1' tests 1-3 (and the duplicated step in problem 61, per the prompt's '[duplicate Xray_conversion-I step]')",
+        "before": "test1 target = [[0.18549537,-0.00161879,0.00032943],[0,0.18550244,-0.00065038],[0,0,0.1854968]] (= np.linalg.inv(A), a//x frame)",
+        "after": "test1 = [[0.18550273,-0.00161995,0.00032942],[0,0.1854965,-0.0006475],[0,0,0.18549537]]; test2 = [[0.18458374,-0.00161192,0.00032779],[0,0.18457755,-0.0006443],[0,0,0.18457642]]; test3 = [[3.26559466e-01,1.63773085e-01,-1.01401692e-06],[0,2.82525107e-01,-5.80984768e-04],[0,0,1.66439200e-01]]",
+        "regen_recipe": "review/work/73/verify/bl_73_1.py (Busing-Levy B: B=[[a*,b*cos(g*),c*cos(b*)],[0,b*sin(g*),-c*sin(b*)cos(alpha)],[0,0,1/c]]); values above are what it produces for the three test cells",
+        "side_effects": "None on 73.2-73.5: verified a BL-based solver PASSES steptest 73.3/73.4/73.5 (their tests use 90-degree cells where both conventions coincide within allclose). 73.6/73.7 targets are ULP artifacts of the author's inv(A) path and must be regenerated anyway under their own fixes. Alternative (keeps frozen target): prompt_edit stating 'B acts on (h,k,l) as a row vector, q = (h,k,l)B, in the Cartesian frame with x//a and b in the xy-plane, i.e. B = inv(A)' - but that contradicts 73.5's column-convention formula q=UB*hkl, so target_regen is cleaner."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "73.2",
+      "defect_type": "D4",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Tested three readings against h5 targets (review/work/73/verify/q_variants.py): (a) detector axes rotated, pivot at beam-center pixel placed det_d along the beam -> max diff 1.1e-16, PASS; (b) whole detector rotated about the sample -> diff ~1e-2, FAIL; (c) det_d = perpendicular distance to the tilted plane -> diff 0.97e-5..1.35e-5, FAIL (exceeds allclose bound ~3e-6 by 3-4x). The prompt indeed never states the pivot or det_d reference point; reading (a) is the most natural for an expert (keeps b_c on the beam axis), so minor is the right severity.",
+      "fix": {
+        "kind": "prompt_edit",
+        "target_location": "sub_steps[1].function_header docstring (and/or step_description_prompt), the det_d line",
+        "before": "det_d: sample distance to the detector, float in the unit of mm",
+        "after": "det_d: sample-to-detector distance measured along the incident beam to the beam-center pixel (xc,yc), in mm; detector yaw/pitch/roll rotations are applied about that beam-center point",
+        "regen_recipe": null,
+        "side_effects": "Same docstring line recurs in steps 73.3, 73.5, 73.7, 73.8, 73.9 headers; apply the same wording there for consistency. No target changes."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "73.3",
+      "defect_type": "D10",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Static: problem_io and every docstring say 'z_s: step size in the \\phi rotation', while the 73.3 prompt says 'During experiments, we rotate $\\theta$ at fixed $\\phi$ and $\\chi$'. Dynamic: my theta-reading (theta = z*z_s, G = Ry(-theta)Rx(chi)Rz(phi)) passes steptest 73.3; the phi-reading (phi advanced by z*z_s) fails np.allclose on test 1. Contradiction real, recoverable from the prompt text -> minor.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "problem_io and docstrings of 73.3/73.5/73.8/73.9 ('z_s' line)",
+        "before": "z_s: step size in the \\phi rotation, float in the unit of degree",
+        "after": "z_s: step size of the \\theta rotation per frame, float in the unit of degree",
+        "regen_recipe": null,
+        "side_effects": "Text-only; no targets touched."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "73.6",
+      "defect_type": "D6",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "Static: are_dicts_close begins 'if dict1.keys() != dict2.keys(): return False' - exact float equality on d* keys. Dynamic (my own fresh ringdstar, B=inv(A) i.e. the exact construction that bit-matches the 73.1 target): keys match targets to relative 2.1e-16 on every ring, but bit-exactly on only 3/7 (test 1) and 8/13 (test 2); ring CONTENTS are set-equal in all rings of all 3 tests. steptest 73.6 FAIL. Closed-form probe proves keys are mutually inconsistent under any single formula: target key(110)=sqrt(2/a**2) bit-exactly but sqrt(2)/a is 1 ULP off, while key(111)=sqrt(3)/a bit-exactly but sqrt(3/a**2) is 1 ULP off; I tested 6 candidate formulas and none matches all of keys (100,110,111,200). The keys encode the author's unknown float path; no independent implementation can realistically pass.",
+      "fix": {
+        "kind": "tolerance_change",
+        "target_location": "sub_steps[5].test_cases[0..2] - the comparison call",
+        "before": "assert are_dicts_close(ringdstar(pa,polar_max,wl), target)",
+        "after": "assert dicts_close_approx_keys(ringdstar(pa,polar_max,wl), target)  # match keys within rtol=1e-9 (sorted key lists pairwise np.allclose), then compare each ring's (h,k,l) membership as a set",
+        "regen_recipe": null,
+        "side_effects": "Requires adding a small comparison helper (do NOT change scicode.compare.cmp.are_dicts_close itself - it is shared by other problems). Alternative: respec keys as round(d*,8) + regenerate targets. Must be combined with the ring-order fix below."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "73.6",
+      "defect_type": "D4",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "Static: docstring promises 'each item is a sorted list', but target rings are NOT lexicographically sorted: test1 ring 0.32129 = [(-1,-1,-1),(1,1,1),(-1,-1,1),...] with (1,1,1) second; 1/7 (test1), 1/13 (test2) and 2/4 (test3) rings unsorted - a stable-sort-by-float-d* Friedel-pair artifact. are_dicts_close compares ring lists positionally via np.allclose. Dynamic: on test 3 ALL 4 of my dict keys are bit-exact, yet my docstring-compliant lexicographically sorted lists still FAIL - so this defect independently blocks the step even with perfect keys. Severity raised from major to blocker: the required order is an ULP artifact not derivable from any spec reading (no defensible ordering rule reproduces it; I checked lexicographic, sign-count, and sum orders).",
+      "fix": {
+        "kind": "target_regen",
+        "target_location": "h5 group '73.6' tests 1-3 (ring list order)",
+        "before": "test1 ring 0.32129... = [(-1,-1,-1),(1,1,1),(-1,-1,1),(-1,1,-1),(-1,1,1),(1,-1,-1),(1,-1,1),(1,1,-1)]",
+        "after": "each ring list sorted lexicographically by (h,k,l): [(-1,-1,-1),(-1,-1,1),(-1,1,-1),(-1,1,1),(1,-1,-1),(1,-1,1),(1,1,-1),(1,1,1)] - matching the docstring's 'sorted list'",
+        "regen_recipe": "rerun the reference ringdstar and apply ringhkls[k] = sorted(map(tuple, ringhkls[k])) before freezing; review/work/73/verify/full_impl.py ringdstar produces the correct contents (set-verified vs targets)",
+        "side_effects": "73.7 targets embed the same ring lists and must be regenerated with the same canonical order; cheaper alternative is set-based comparison in the test, which avoids regeneration."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "73.7",
+      "defect_type": "D4",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "My fresh implementation: set(ha)==set(target_ha) and set(hb)==set(target_hb) in ALL 3 tests, steptest 73.7 FAIL. With my lexicographically sorted lists (docstring: 'a list of possible sorted (h,k,l)'), ha order mismatches the target in all 3 tests (target ha = [(-1,-1,-1),(1,1,1),(-1,-1,-3)... style Friedel-artifact order, not lex-sorted), hb order happens to match. cmp_tuple_or_list -> np.allclose is positional, so a fully correct candidate set scores 0. (Detail correction to first pass: with canonical sorted lists it is ha that fails in all three tests; their 'hb in test 2/3' discrepancy was an artifact of their unsorted variant - verdict unchanged.)",
+      "fix": {
+        "kind": "target_regen",
+        "target_location": "h5 group '73.7' tests 1-3",
+        "before": "target ha lists in stable-sort-by-d* artifact order, e.g. test1 ha = [(-1,-1,-1),(1,1,1),(-1,-1,1),...]",
+        "after": "ha/hb lists sorted lexicographically (consistent with the 73.6 fix); or keep targets and replace cmp_tuple_or_list with a set-based comparison for this step",
+        "regen_recipe": "reference hkl_pairs over the regenerated 73.6 rings, then sorted() each list before freezing",
+        "side_effects": "Must be done together with the 73.6 ring-order fix so both steps use the same canonical order."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "73.8",
+      "defect_type": "D6",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "My own reimplementation: test 1 has 24 candidate (h1,h2) pairs passing any angle filter (all have identical theoretical angle 35.264 deg vs observed 35.421 deg - exact cubic symmetry copies), and ALL 24 indexing distances tie within 2.3e-15 (tests 2/3: 24 tied within 1.7e-15/2.0e-15 on values ~0.03). The target's pick ((-1,1,1),(-2,0,2)) ranks 9th of 24 (test2: 8th, test3: 15th) in canonical sorted-candidate iteration order - so neither strict-< argmin (picks 1st) nor <= argmin (picks last) reproduces it; only the author's bit-exact float noise does. My argmin lands on ((-1,-1,-1),(-2,-2,0)); steptest 73.8 FAIL. The angle tolerance ('close to') is also unstated, but no tolerance can break the tie since the tied candidates are exact symmetry copies.",
+      "fix": {
+        "kind": "target_regen",
+        "target_location": "sub_steps[7].step_description_prompt + h5 group '73.8' tests 1-3",
+        "before": "background: 'select those whose angles are close to the angle between Q1 and Q2... Choose the best U matrix, where the indices of Q3 have the shortest distance from the nearby Bragg peak' (no tolerance, no tie-break)",
+        "after": "add: 'use an angle tolerance of 1 degree; if several candidate pairs give indexing distances equal within 1e-10, return the pair whose (h1,h2) is lexicographically smallest'; regenerate the 3 targets from a reference implementing exactly that rule",
+        "regen_recipe": "review/work/73/verify/full_impl.py Umat_p modified to collect all candidates within 1e-10 of the min distance and pick min((h1,h2)); regenerated (best_U,best_H1,best_H2,best_H) for the 3 tests",
+        "side_effects": "73.9 targets derive from 73.8's selection and must be regenerated with the same rule. Alternative without spec change: compare U/H1/H2/H modulo the lattice point group (heavier test-harness change)."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "73.9",
+      "defect_type": "D6",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "My fresh auto_index: tests 1-3 FAIL np.allclose, but row-wise sorted |hkl| matches the target with atol 0.05 on every peak of every test - my output is a symmetry-equivalent signed permutation (same physical indexing, different equivalent setting inherited from 73.8's arbitrary tie-break). Decisive extra evidence: the targets THEMSELVES assign the same physical peak different (h,k,l) across tests 1-3 (I mapped each (px,py,z) peak across the three permuted input orders: per-peak indices agree in 0 of 3 pairings) - i.e. the 'right answer' changes with input order, proving the labeling is an artifact. Test 4 (integerness boolean) passes for my solver.",
+      "fix": {
+        "kind": "target_regen",
+        "target_location": "h5 group '73.9' tests 1-3 (test 4 is fine as-is)",
+        "before": "targets in three mutually inconsistent symmetry settings produced by the author's float-noise tie-break",
+        "after": "regenerate from the canonical-tie-break reference (73.8 fix); alternatively change tests 1-3 to a symmetry-invariant comparison: np.allclose(np.sort(np.abs(result),axis=1), np.sort(np.abs(target),axis=1), atol=0.05) plus the existing integerness check",
+        "regen_recipe": "run the fixed reference auto_index on the 3 peak lists after applying the 73.8 canonical tie-break",
+        "side_effects": "general_tests duplicate 73.9's test_cases and must be updated identically."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "73.6",
+      "defect_type": "D10",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Static, quoted: step_description_prompt = 'Calculate $d^* = 1/d$, where $d$ is the lattice spacing of the reciprocal lattice for a given $(h,k,l)$' - a scalar computation for ONE (h,k,l) with no (h,k,l) argument in the header. The tested contract (docstring) = 'List all d*<d*_max and the corresponding (h,k,l)... Output ringhkls: a dictionary'. The description and contract describe different functions; recoverable from the docstring -> minor.",
+      "fix": {
+        "kind": "prompt_edit",
+        "target_location": "sub_steps[5].step_description_prompt",
+        "before": "Calculate $d^* = 1/d$, where $d$ is the lattice spacing of the reciprocal lattice for a given $(h,k,l)$",
+        "after": "Enumerate all reflections $(h,k,l)$ with $d^* = 1/d < d^*_{max} = 2\\sin(\\mathrm{polar\\_max}/2)/\\lambda$ and group them into powder rings: return a dictionary mapping each distinct $d^*$ to the lexicographically sorted list of its $(h,k,l)$",
+        "regen_recipe": null,
+        "side_effects": "Text-only."
+      },
+      "uncertainty_notes": null
+    }
+  ],
+  "missed_defects": [],
+  "summary": "All 9 first-pass findings confirmed at high confidence with independent reproductions (one severity raised: 73.6's ring-order D4 is blocker-level on its own - on test 3 all my dict keys are bit-exact yet docstring-compliant sorted lists still fail). 5 of 9 steps (73.1, 73.6, 73.7, 73.8, 73.9) are unpassable by a spec-compliant solver: 73.1's target is bit-exactly inv(A) rather than the Busing-Levy matrix the prompt uniquely defines, 73.6/73.7 demand bit-exact ULP-artifact float keys and an unsorted artifact list order, and 73.8/73.9 hinge on a float-noise tie-break among 24 exact symmetry ties (the targets themselves change symmetry setting with input order). Fixable to fair but with moderate-to-heavy effort: 73.1 is a cheap 3-target regen (verified side-effect-free on 73.2-73.5); 73.6-73.9 need a coordinated fix - spec edits pinning canonical ordering/tie-break plus regenerating all four steps' targets from one pinned reference (or switching their tests to set-based/symmetry-invariant comparisons)."
+}

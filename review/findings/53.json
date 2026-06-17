@@ -1,0 +1,28 @@
+{
+  "problem_id": "53",
+  "split": "test",
+  "reviewer_model": "fable",
+  "steps_reviewed": 4,
+  "steps": [
+    {"step_number": "53.1", "static_ok": true, "dynamic_status": "pass",
+     "notes": "gillespie_step reproducible: exp(scale=1/A) drawn first, then 1 uniform for reaction selection in order [prey_birth,predation,predator_death]; rand+cumsum AND np.random.choice both match all 3 targets."},
+    {"step_number": "53.2", "static_ok": true, "dynamic_status": "pass",
+     "notes": "evolve_LV passes only after excluding the event that crosses T from the recorded arrays (naive while-t<T loop gives length 3468 vs target 3467 -> hard shape FAIL)."},
+    {"step_number": "53.3", "static_ok": true, "dynamic_status": "pass",
+     "notes": "spectral_periodicity via interp1d resample + FFT peak; period=1/f_peak rounded to 1 dp (round-to-nearest, NOT ceil). Passes clean sin/cos tests and the real noisy trajectory in 53.4."},
+    {"step_number": "53.4", "static_ok": true, "dynamic_status": "pass",
+     "notes": "predator_prey passes all 3 (coexistence period 2.5, mutual extinction 0.0, predator extinction 2.1M-point trajectory 0.0). Joint mode runs in ~11.7s, RSS ~474MB."}
+  ],
+  "findings": [
+    {"step_number": "53.1", "defect_type": "D10", "severity": "major", "confidence": "medium",
+     "evidence": "Background: 'sampled from an exponential distribution with a rate equal to the sum of all propensities, given by the probability density function: f(\\Delta t) = (1/a) exp(-\\Delta t/a) where a = \\sum a_i'. The prose ('rate = sum of propensities') implies np.random.exponential(scale=1/a) (standard Gillespie), which is what the frozen target encodes: with seed 2, np.random.exponential()/A = 0.0004090657062640107 = target exactly. BUT the explicit PDF f=(1/a)exp(-Dt/a) maps to numpy's documented exponential pdf f(x;beta)=(1/beta)e^{-x/beta} with beta=scale=a, i.e. np.random.exponential(scale=a). A solver pattern-matching the given formula to numpy uses scale=a and gets times ~A^2 (~1.96e6x) too large -> every step (53.1/53.2/53.4) fails. The prose and the formula contradict each other; the formula is mathematically wrong for Gillespie.",
+     "suggested_fix": "Correct the PDF to f(\\Delta t) = a*exp(-a*\\Delta t) (mean 1/a), or state explicitly 'use np.random.exponential(scale=1/a) where a=sum of propensities' to match the prose and the target."},
+    {"step_number": "53.2", "defect_type": "D4", "severity": "major", "confidence": "medium",
+     "evidence": "Prompt: 'simulate ... up to a specified final time T ... Record both the time coordinates and the evolution of populations.' The contract does not say whether the event that pushes t past T is recorded. The frozen targets exclude it: test0 (T=2) has n=3467 with last_t=1.999376 < T. The naive loop 'while t<T: step; t+=dt; record' records the crossing event -> length 3468, last_t>=T -> np.allclose raises 'operands could not be broadcast together with shapes (3468,) (3467,)' (verified: my first implementation failed exactly this way; passing requires `if t>=T: break` before recording).",
+     "suggested_fix": "State the boundary explicitly, e.g. 'record an event only if its time is strictly less than T' (or '<= T'), so the recorded array length is unambiguous."},
+    {"step_number": "53.3", "defect_type": "D10", "severity": "minor", "confidence": "medium",
+     "evidence": "Prompt/header/IO all say the periodicity is 'rounded up to one decimal point'. The frozen targets use round-to-nearest, not ceil: test1 period 2*pi/10=0.6283 -> target 0.6 (rounded DOWN); ceil to 0.1 would give 0.7. A solver taking 'rounded up' literally (math.ceil(x*10)/10) fails 53.3 test1 & test2 and 53.4. round(x,1) (the common reading of the phrase) matches.",
+     "suggested_fix": "Replace 'rounded up to one decimal point' with 'rounded to one decimal place (nearest)' in 53.3, 53.4, and the problem IO block."}
+  ],
+  "overall_assessment": "Problem 53 (stochastic Lotka-Volterra via Gillespie) is solvable and fully reproducible: a best-reading implementation passes all four steps under official joint scoring (53.4 in ~11.7s). The per-step RNG pattern (exponential drawn first with scale=1/A, then a single uniform for reaction selection in docstring order) is the natural reading and is self-checkable against 53.1's sub-targets; both rand+cumsum and np.random.choice reproduce the full trajectories, so the seeded determinism is fair, not a hidden-pattern trap. Three documentation defects could still mis-score a competent solver: (1) the background's exponential PDF f=(1/a)exp(-Dt/a) contradicts the prose and maps to np.random.exponential(scale=a), the wrong scale, which would fail every step; (2) the t<T recording boundary is unspecified and an off-by-one (recording the event crossing T) causes a hard array-shape failure in 53.2/53.4; (3) 'rounded up to one decimal point' actually means round-to-nearest in the targets, so a ceil interpretation fails 53.3/53.4. Fixing the wording on these three points makes the problem fully fair."
+}

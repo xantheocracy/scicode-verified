@@ -1,0 +1,128 @@
+{
+  "problem_id": "70",
+  "split": "dev",
+  "verifier_model": "fable",
+  "verdicts": [
+    {
+      "step_number": "70.7",
+      "defect_type": "D10",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "Wrote my OWN full-stack implementation (review/work/70/verify/step7_verbatim.py) implementing the background's displayed closed form u_k = sum_m e^{iL psi_m}(psi_m h_k - (h*h)_k)/(3 psi_m^2 - |h|^2) verbatim: steptest 70.7 joint -> FAIL. Identical file with 1j* prefix (step7_with_i.py) -> PASS. Numerical cross-check vs the trace definition u_k = -(i/2)Tr(lambda^k U3) given three lines earlier in the SAME background (U3 = expm(-i h.lambda L)): max|def - displayed| = 3.4e-4, max|def - i*displayed| = 3.5e-15 -- the displayed formula is off by exactly a factor of i. Reconstructed U3 from displayed u_k is non-unitary (||UU^dag - I|| = 7.8e-4 vs 1.5e-14 with i). h5 target 70.7/test0 element 1 = -2.4167e-4+1.799e-8j matches the i-included version; displayed version gives 1.799e-8+2.4167e-4j. A trace-definition implementation via np.linalg.eigh (step7_tracedef.py) also PASSES, so the step is survivable without the boxed formula -- major, not blocker, as first pass said.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[6].step_background, final displayed equation block",
+        "before": "& u_{k}=\\sum_{m=1}^{3} e^{i L \\psi_{m}} \\frac{\\psi_{m} h_{k}-(h * h)_{k}}{3 \\psi_{m}^{2}-|h|^{2}}",
+        "after": "& u_{k}=i \\sum_{m=1}^{3} e^{i L \\psi_{m}} \\frac{\\psi_{m} h_{k}-(h * h)_{k}}{3 \\psi_{m}^{2}-|h|^{2}}",
+        "side_effects": "None. Target, gold code (which already has 1.j*), trace definition in the same background, and source paper (arXiv:1904.12391) all already encode the i-included version; this edit only removes the internal contradiction."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "70.8",
+      "defect_type": "D6",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "steptest 70.8 --use-gold joint -> FAIL; --isolate -> 3/4 pass, test 4 (index 3) fails. My own re-run of gold vs h5 target for test 4 on numpy 2.2.6: max abs diff 1.7914e-4 (gold 0.41075835 vs target 0.41093749); np.allclose default False, rtol=1e-3 True. Independent direct-eigh evolution operator also FAILS: max diff 1.055e-5 vs effective tol ~4e-6 (rtol*0.41 + atol). Phases |L*psi_m| = {1.384e10, 6.625e9, 7.219e9} radians, so ulp-level evaluation-order differences amplify to 1e-5..2e-4 probability shifts. No implementation can reliably pass test 4 on the current environment; joint scoring makes 70.8 FAIL for everyone. This is the KNOWN 70.8 defect from the skill's facts list; the first pass correctly flagged it as known and the quantification is accurate.",
+      "fix": {
+        "kind": "tolerance_change",
+        "target_location": "sub_steps[7].test_cases[3], final assert line",
+        "before": "assert np.allclose(probabilities_3nu(hamiltonian, L), target)",
+        "after": "assert np.allclose(probabilities_3nu(hamiltonian, L), target, rtol=1e-3, atol=1e-6)",
+        "side_effects": "No h5 regeneration needed: current-environment gold is within rtol=1e-3 of the frozen numpy-1.x target (verified True). rtol=1e-3 on O(0.04-0.67) probabilities still rejects grossly wrong implementations (errors O(0.1)); it is the physically meaningful precision given ~1.4e10-radian phases. Alternative: test_edit replacing L=1.611792e+22 with a value giving O(10-100) radian phases + target_regen -- cleaner but requires touching test_data.h5."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "70.1",
+      "defect_type": "D1",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Static: header is pmns_mixing_matrix(s12, s23, s13, dCP); every test defines s12, s13, s23 and calls pmns_mixing_matrix(s12,s13,s23,dCP) -- value named s13 lands in the s23 slot (same pattern in hamiltonian_3nu(s12, s13, s23, ...) calls in 70.2-70.8). Dynamic: pmns(s12, 0.2, 0.7071, 0) vs pmns(s12, 0.7071, 0.2, 0) differ (max diff 0.748); h5 target 70.1/test0 matches the as-written swapped call (allclose True) and NOT the name-respecting one (False). Scoring is fully self-consistent (gold passes all steps through 70.7), so no solver is mis-scored -- minor is correct: a labeling/maintenance hazard, not a scoring defect.",
+      "fix": {
+        "kind": "test_edit",
+        "target_location": "sub_steps[0].test_cases[0..2] (and the identical preamble pattern in 70.2-70.8 test_cases)",
+        "before": "s13 = 0.2\ns23 = 1/cmath.sqrt(2)\nassert np.allclose(pmns_mixing_matrix(s12,s13,s23,0), target)",
+        "after": "s23 = 0.2\ns13 = 1/cmath.sqrt(2)\nassert np.allclose(pmns_mixing_matrix(s12,s23,s13,0), target)",
+        "side_effects": "NONE numerically -- this swaps only the variable NAMES while preserving the exact positional values, so no target regeneration. Must be applied uniformly to every test preamble in 70.1-70.8 that uses the s13/s23 names. (Alternative: regenerate targets with name-respecting calls, which changes the physics scenarios -- not recommended.)"
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "70.1",
+      "defect_type": "D4",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "type(1/cmath.sqrt(2)) is complex ((0.7071067811865475+0j)) while docstring says 's12 : Sin(theta_12); float'. math.sqrt(1 - s12**2) raises TypeError: must be real number, not complex -- a float-contract math-module implementation crashes on every test. Mitigated (as first pass noted) by the prompt's 'Express all values as complex numbers' and cmath in required_dependencies; minor is the right severity.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[0].function_header docstring, Input section (and the identical lines in sub_steps[1] hamiltonian_3nu docstring)",
+        "before": "s12 : Sin(theta_12); float",
+        "after": "s12 : Sin(theta_12); float or complex",
+        "side_effects": "Apply same change to the s23 and s13 lines. No target or test change. Alternative: rewrite test preambles with real literals (1/math.sqrt(2)) -- touches 8 steps' tests for the same effect."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "70.1",
+      "defect_type": "D10",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Docstring: 'pmns: numpy array of floats with shape (3,3)'. h5 targets for all 3 tests are complex128; test 2 (dCP=1) target has max |imag| = 0.4207, so a float array is mathematically impossible. Prompt simultaneously demands 'Express all values as complex numbers'. Pure doc contradiction; never flips a score (np.allclose handles complex).",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[0].function_header docstring, Output line",
+        "before": "pmns: numpy array of floats with shape (3,3) containing the 3x3 PMNS mixing matrix",
+        "after": "pmns: numpy array of complex numbers with shape (3,3) containing the 3x3 PMNS mixing matrix",
+        "side_effects": "None."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "70.5",
+      "defect_type": "D8",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "h5 targets: test0 = 0j exactly, test1 = -5.598e-9 (below allclose atol 1e-8), test2 = -1.616e-7. My own probe with 'def star_product(i, h): return 0.0' (review/work/70/verify/step5_zero.py): isolated 2/3 pass, official joint FAIL (test 3 rejects it). So the step still discriminates, but only via one scalar with ~6% relative slack (tol ~1.0e-8 vs |target| 1.6e-7); tests 1-2 constrain nothing. Minor is correct.",
+      "fix": {
+        "kind": "test_edit",
+        "target_location": "sub_steps[4].test_cases[0] (or an added test_cases[3])",
+        "before": "D21 = 1e-4\nD31 = 1e-3",
+        "after": "D21 = 1.0\nD31 = 3.0",
+        "side_effects": "Requires regenerating that test's h5 target (run gold star_product on the new h; e.g. with D21=1.0, D31=3.0 the targets become O(0.01-1), far above atol). No other step affected (each step's tests build their own hamiltonian)."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "70.6",
+      "defect_type": "D8",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "h5 targets for the h3 = <h> element: 1.1611e-11, 1.1611e-11, 1.4514e-9 -- all below allclose atol 1e-8, so that returned element is never verified. My own probe returning [h2, 0.0, psi_list] (correct chi computed internally from the true h3, but the OUTPUT h3 replaced by 0.0; review/work/70/verify/step6_h3zero.py): official joint PASS. h2 (7.6e-8, 1.9e-6) and psi (~3e-4) are above tolerance, so the internal computation is partially constrained; only the returned invariant is free. Minor is correct. (Also re-checked first pass's note that test0 and test1 targets are identical: correct and mathematically expected -- SU(3) invariants depend only on the Hamiltonian eigenvalues, i.e. D21/D31, not on mixing angles.)",
+      "fix": {
+        "kind": "test_edit",
+        "target_location": "sub_steps[5].test_cases[0] (or an added test case)",
+        "before": "D21 = 1e-4\nD31 = 1e-3",
+        "after": "D21 = 1.0\nD31 = 3.0",
+        "side_effects": "Requires regenerating that test's h5 target (cmp_tuple_or_list triple). With O(1) mass splittings h3 ~ O(0.1-1), far above atol. Same edit as the 70.5 fix can share the scenario."
+      },
+      "uncertainty_notes": null
+    }
+  ],
+  "missed_defects": [],
+  "summary": "All 6 first-pass findings confirmed at their original severities (0 refuted, 0 uncertain); every decisive experiment was independently reproduced with fresh code. Spot-checks found no missed defects: required_dependencies exec cleanly, all header-vs-call arities match, gold passes 70.1-70.7. The problem is fixable to fair with modest effort: one one-character background edit (add the factor i to 70.7's displayed u_k formula) and one tolerance change on 70.8 test 4 (rtol=1e-3, no h5 regen needed) remove both scoring defects; the four minor doc/test-hygiene items are optional polish, two of which would need single-target regeneration if adopted."
+}

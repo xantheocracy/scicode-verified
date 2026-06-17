@@ -1,0 +1,21 @@
+{
+  "problem_id": "12",
+  "verifier_model": "fable",
+  "n_confirmed": 2, "n_refuted": 0, "n_uncertain": 0,
+  "verdicts": [
+    {"step_number": "12.14", "defect_type": "D4",
+     "verdict": "confirmed",
+     "tier": "C",
+     "revised_severity": null,
+     "fix_kind": "prompt_edit",
+     "one_liner": "Scratch logs (scf_variants.log, scf_trace.log) reproduce the claim: SCF unconverged at iteration cap (band energies oscillate ~0.5-0.8 Ry at it7-9, max|drho|=0.083 vs tolerance 1e-7), exactly 1 of 12 enumerated conventions matches target -133.068061, literal-reading variant (-133.5719) fails, and the recovered convention passes 3/3 (t14_fixed.log); prompt text quoted accurately."},
+    {"step_number": "12.2", "defect_type": "D8",
+     "verdict": "confirmed",
+     "tier": "A",
+     "revised_severity": null,
+     "fix_kind": "target_regen",
+     "one_liner": "Read frozen h5 targets directly: max|t| = 2.091e-8 / 1.641e-9 / 7.950e-9 as claimed; all-zeros passes tests 2 and 3 under np.allclose default atol=1e-8, 0.5x/2x/negated pass test 2; only test 1 is constraining. Minor severity appropriate."}
+  ],
+  "missed_defects": [],
+  "summary": "Both findings confirmed: the 12.14 D4 (unconverged SCF target pinning one of 12 defensible loop conventions, major) is fully backed by the first-pass variant-search logs, and the 12.2 D8 (targets at np.allclose atol scale, minor) reproduces exactly against the frozen h5. Problem is fixable to fair via the suggested prompt_edit for 12.14 and target_regen for 12.2."
+}

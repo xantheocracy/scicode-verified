@@ -1,0 +1,145 @@
+{
+  "problem_id": "66",
+  "split": "test",
+  "verifier_model": "fable",
+  "verdicts": [
+    {
+      "step_number": "66.1",
+      "defect_type": "D4",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "Wrote my own independent implementations. Blocked ordering (all A atoms then all B at offset (0, a/sqrt(3)); a1=(a,0), a2=(a/2, a*sqrt(3)/2); i outer / j inner, each -n..n; s added to every y): `python3 review/tools/steptest.py --problem 66 --step 66.1 --code review/work/66/verify/v_661_block.py` -> PASS. Per-cell interleaved (A,B) ordering of the SAME atom set: v_661_interleaved.py -> FAIL. Verified set-equality: sorted rows of both variants and of the h5 target are identical (np.allclose True), positional comparison of interleaved vs target is False. Inspected h5 target 66.1/test0 directly: rows 0-8 are the A sublattice, rows 9-17 the B sublattice at +(0, 1.42028166) — pure ordering convention, unstated anywhere in prompt/docstring ('Make sure the armchair direction is along the y-axis...' pins orientation only).",
+      "fix": {
+        "kind": "prompt_edit",
+        "target_location": "sub_steps[0].step_description_prompt",
+        "before": "Make sure the armchair direction is along the y-axis and the zigzag direction is along the x-axis.",
+        "after": "Make sure the armchair direction is along the y-axis and the zigzag direction is along the x-axis. Use lattice vectors a1 = (a, 0, 0) and a2 = (a/2, a*sqrt(3)/2, 0) with basis atoms A = (0, 0, 0) and B = (0, a/sqrt(3), 0). Return an array of shape (2*(2n+1)^2, 3): first all A-sublattice atoms, then all B-sublattice atoms, where within each sublattice the rows iterate the a1 index i = -n..n as the outer loop and the a2 index j = -n..n as the inner loop, each atom at i*a1 + j*a2 + basis + (0, s, z).",
+        "side_effects": "None on targets (h5 unchanged; this is exactly the encoded convention). Steps 66.2/66.6 call generate_monolayer_graphene but their tests are insensitive to row order (66.2 targets are identical rows; 66.6 sums over pairs), so no downstream change. Alternative: make the test order-insensitive (sort rows of both sides before allclose), which keeps the prompt short but edits 3 test cases."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "66.2",
+      "defect_type": "D4",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "Geometry check: on generate_monolayer_graphene(0,2.46,1.8,1) (the test's own 18-atom flake), atom 14 at (1.23, 3.5507) has argsort-3-nearest distances [1.4203, 2.46, 2.46] with 4 atoms tied at 2.46; the two tie-broken picks are antiparallel -> one cross product is exactly zero. My literal implementation (normalize EVERY cross product, as the prompt's '3 normalized cross products' states; v_662_literal.py) -> 0/0 -> nan -> steptest FAIL. Adding an unstated zero-norm guard (v_662_guarded.py) -> PASS. Additionally verified the pairing convention is load-bearing: with the guard, cyclic pairs (v1xv2, v2xv3, v3xv1) pass, but non-cyclic (v1xv2, v1xv3, v2xv3) suffers exact cancellation on atom 14 (antiparallel pair makes the two surviving crosses opposite) -> nan -> all-False. Two independent unstated coin flips, each fatal.",
+      "fix": {
+        "kind": "prompt_edit",
+        "target_location": "sub_steps[1].step_description_prompt",
+        "before": "A normal vector at an atom is defined by averaging the 3 normalized cross products of vectors from this atom to its 3 nearest neighbors.",
+        "after": "A normal vector at an atom is defined by averaging the 3 normalized cross products of cyclically consecutive pairs of the vectors v1, v2, v3 from this atom to its 3 nearest neighbors (v1 x v2, v2 x v3, v3 x v1, neighbors ordered by distance with ties broken by atom index); if a cross product is the zero vector, leave it unnormalized (skip the division).",
+        "side_effects": "None on targets (the h5 targets already encode guarded-cyclic behavior; my guarded-cyclic implementation passes as-is). Mirror the same wording in the function_header docstring if desired. Alternative: test_edit to use bulk/corrugated geometry where every atom has 3 unambiguous bonded neighbors — but that requires regenerating 3 targets."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "66.2",
+      "defect_type": "D10",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Static, quoted verbatim from review/problems/66.json: step description says 'Return the normalized normal vectors of shape `(natoms,)`' and docstring says 'normed_cross_avg (np.array): Shape (natoms,)'; I loaded the h5 targets myself: all three are shape (18, 3). Also confirmed the truncated final sentence — the prompt ends exactly 'Correct normal vectors in the wrong direction by multiplying by -' (missing '1'). Minor because no sensible (natoms,) return exists for vectors, so competent solvers return (natoms,3) anyway, and the sign-rule intent is still inferable.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[1].step_description_prompt AND sub_steps[1].function_header docstring",
+        "before": "Return the normalized normal vectors of shape `(natoms,)`. ... Correct normal vectors in the wrong direction by multiplying by -  ||  normed_cross_avg (np.array): Shape (natoms,)",
+        "after": "Return the normalized normal vectors of shape `(natoms, 3)`. ... Correct normal vectors in the wrong direction by multiplying by -1  ||  normed_cross_avg (np.array): Shape (natoms, 3)",
+        "side_effects": "None; documentation-only, targets already (18,3)."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "66.2",
+      "defect_type": "D8",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Loaded targets: all rows of each (18,3) target are identical (0,0,-1) for z>0 and (0,0,+1) for z<0 (np.unique over rows gives a single row per test). My trivial probe ignoring the entire specified algorithm (return -z-hat where z>0 else +z-hat; v_662_trivial.py) -> steptest PASS (official joint scoring). The cross-product machinery is completely unconstrained by the flat test geometries — while the spec-literal implementation fails (see D4).",
+      "fix": {
+        "kind": "test_edit",
+        "target_location": "sub_steps[1].test_cases (add a 4th case)",
+        "before": "(only flat-layer inputs: generate_monolayer_graphene(...) with constant z)",
+        "after": "Add e.g.: xyz = generate_monolayer_graphene(0, 2.46, 1.8, 1); xyz[:,2] += 0.2*np.sin(xyz[:,0]); assert np.allclose(assign_normals(xyz), target) — and regenerate its target from the guarded-cyclic reference implementation.",
+        "side_effects": "Requires adding one target to the h5 file (group 66.2). Existing 3 tests/targets untouched."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "66.5",
+      "defect_type": "D8",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Targets are [1.0, 0.5, 0.0] for r=0,8,16 (loaded from h5 myself). My branchless probe omitting the required 'zero when x_ij > 1' rule (v_665_nobranch.py, bare polynomial only) -> steptest 66.5 PASS: the polynomial is exactly 0 at x=1 and no test exercises r > rcut. The spec'd cutoff branch is dead weight in scoring. Note 66.6's targets are also insensitive to this (all pairs there have r <= rcut at the masked stage), so the weakness never gets caught downstream either.",
+      "fix": {
+        "kind": "test_edit",
+        "target_location": "sub_steps[4].test_cases (add a 4th case)",
+        "before": "(tests only r = 0.0, 8.0, 16.0)",
+        "after": "Add: assert np.allclose(taper(np.array([20.0]), 16), target) with target 0.0.",
+        "side_effects": "Requires adding one scalar target (0.0) to h5 group 66.5."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "66.6",
+      "defect_type": "D4",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "Wrote my own faithful implementation of the displayed equation E = sum_i sum_j Tap(r_ij) V_ij (v_666_sum.py) -> steptest FAIL. Same code with '/ (len(top)+len(bot))' appended (v_666_peratom.py) -> steptest PASS (all 6 tests, official joint scoring). Numerics: my double sums are 85.4459433462, -3711.8763917720, -22656.7519427652 for n=5,10,20; divided by N_total = 484, 1764, 6724 they match the h5 targets 0.1765412052606555, -2.1042383173310908, -3.3695347922018146 with relative error <= 1.04e-14. Per-atom normalization is stated nowhere (prompt equation, docstring 'evaluted KC energy', and problem_io 'energy (float): KC potential energy' all say total energy), so no formula-faithful solution can pass: blocker stands.",
+      "fix": {
+        "kind": "prompt_edit",
+        "target_location": "sub_steps[5].step_description_prompt (after the equation block) AND sub_steps[5].function_header docstring AND problem_io/problem_description_main",
+        "before": "Returns:\n        potential (float): evaluted KC energy",
+        "after": "Append to the step prompt: 'Return the average energy per atom: divide the double sum by the total number of atoms (Ntop + Nbot).' and change the docstring to 'potential (float): evaluated KC energy per atom'; update problem_io to 'energy (float): KC potential energy per atom'.",
+        "side_effects": "None on targets (h5 already encodes per-atom values). general_tests duplicates this step's tests and needs no change. Alternative (worse): target_regen to the unnormalized sums above — would also require regenerating tests 3-5 energy_refs and touches the h5."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "66.6",
+      "defect_type": "D10",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "Static: the step prompt commands verbatim 'Use the following values for KC parameters:\\nz0 = 3.416084\\nC0 = 20.021583\\nC2 = 10.9055107\\nC4 = 4.2756354\\nC = E-2\\ndelta = 0.8447122\\nlamda = 2.9360584\\nA = 14.3132588\\nrcut = 16' — 'C = E-2' is corrupted (no mantissa) and every value contradicts the function_header defaults (z0=3.370060885645178, C0=21.78333851687074, ...). Dynamic: per-atom energy with the description set (C read as 1e-2) at n=5 is -4.917708 vs target 0.176541 -> allclose False; the header-default set reproduces all targets to 1e-14 (see D4 reproduction). A solver obeying the explicit instruction fails tests 0-2.",
+      "fix": {
+        "kind": "prompt_edit",
+        "target_location": "sub_steps[5].step_description_prompt",
+        "before": "Use the following values for KC parameters:\nz0 = 3.416084\nC0 = 20.021583\nC2 = 10.9055107\nC4 = 4.2756354\nC = E-2\ndelta = 0.8447122\nlamda = 2.9360584\nA = 14.3132588\nrcut = 16",
+        "after": "Use the KC parameter values given as default arguments in the function header.",
+        "side_effects": "None; targets already encode the header defaults. (Equivalent alternative: replace the listed numbers with the header defaults verbatim.)"
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "66.6",
+      "defect_type": "D8",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Tests 3-5 read verbatim 'assert (np.abs(energy - energy_ref < 2)) == target' with h5 targets all boolean True (loaded myself). Precedence makes this one-sided: I verified bool(np.abs(-1e9 - ref < 2)) == True for all three refs while bool(np.abs(+1e9 - ref < 2)) == False — any sufficiently negative wrong answer passes (my unnormalized totals -22656.8/-110k/-6k also pass them). Also confirmed test 3's energy_ref (-4.729262873294083) differs from the per-atom reference value (-3.3695347922) for its geometrically identical configuration (d=3.2 == z=+-1.6, n=20, same as test 2). Crucially for the fix: the correct per-atom values at d=3.2/3.6/7 are -3.3695/-16.4054/-0.8977, within |diff| = 1.36/0.96/0.05 of the existing refs, so fixing the parenthesization alone keeps a correct solution passing — no h5 regen needed (targets are True either way). Tests 0-2 still constrain the step, hence minor.",
+      "fix": {
+        "kind": "test_edit",
+        "target_location": "sub_steps[5].test_cases[3], [4], [5] (and the identical lines in general_tests)",
+        "before": "assert (np.abs(energy - energy_ref < 2)) == target",
+        "after": "assert (np.abs(energy - energy_ref) < 2) == target",
+        "side_effects": "None on h5 (targets remain True; verified the correct implementation stays within the two-sided band for all three refs). Optionally also regenerate the energy_ref values from the reference implementation for cleanliness (test 3's ref should be -3.3695347922018146)."
+      },
+      "uncertainty_notes": null
+    }
+  ],
+  "missed_defects": [],
+  "summary": "All 8 first-pass findings confirmed at their original severities (1 blocker, 3 major, 4 minor); none refuted, none uncertain, no missed defects found (deps exec cleanly, all header/call arities match, target magnitudes are well above atol). The problem is fixable to fair entirely with cheap text edits: 66.6's blocker and D10 are pure prompt/doc edits (state per-atom normalization; remove the stale corrupted parameter block), 66.1 and 66.2 need the construction/ordering and zero-cross/cyclic-pairing conventions written into the prompts, and the one-sided assert in 66.6 tests 3-5 is a one-character parenthesization fix that provably does not disturb correct solutions. Only the two minor D8 test-strength gaps (flat-geometry normals, untested taper cutoff) would require adding new targets to the h5, and they are optional hardening rather than fairness requirements."
+}

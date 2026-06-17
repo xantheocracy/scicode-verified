@@ -1,0 +1,177 @@
+{
+  "problem_id": "28",
+  "split": "test",
+  "verifier_model": "fable",
+  "verdicts": [
+    {
+      "step_number": "28.1-28.3 (all)",
+      "defect_type": "D12",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "python3 -c 'from scipy.integrate import simps' -> ImportError on scipy 1.15.2. steptest.py --problem 28 --step {28.1,28.2,28.3} --code verify/impl_good.py: ALL THREE print 'RESULT step 28.x: FAIL (official joint scoring)' with traceback 'ImportError: cannot import name simps from scipy.integrate' at line 2, i.e. before any solver code executes. Behind a simps->simpson shim the same impl_good.py passes 3/3, 3/3, 4/4 tests, proving the import alone zeroes the problem.",
+      "fix": {
+        "kind": "prompt_edit",
+        "target_location": "problem JSON top-level field required_dependencies",
+        "before": "import numpy as np\nfrom scipy.integrate import simps",
+        "after": "import numpy as np\nfrom scipy.integrate import simpson as simps",
+        "side_effects": "None on targets: simps is never actually used by the computations the targets encode (verified: all steps pass behind the shim without calling simps). Alternative: pin scipy<1.14 in the eval env (env_pin). Same fix needed for problem 2 per known facts."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "28.2",
+      "defect_type": "D10",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "Reproduced both readings myself (simps-shimmed joint runner). Docstring-literal geometry (q0 --propagate s--> lens Mf1 --propagate z-->, 'z: distances from the lens'): FAILS all 3 tests; its argmin lands at index 213-218 (z~64-65 mm) vs target argmin 718/801/832 (z=215.6/240.5/249.85). Target-informed geometry (z = ABSOLUTE axis coordinate, waist at z=s, lens at z=L1) matches all 3 h5 targets to max|diff| <= 1.7e-16. Analytic cross-check: target wz[0] = 0.430318/0.499050/0.323298 = w0*sqrt(1+(s/zR)^2) with zR = pi*w0^2/(lambda*Mp2) = 78.737 mm, exactly the encoded geometry's prediction; test-1 target focus z=249.85 = L1 + 49.85, the ABCD image of a waist 50 mm before an f=50 lens. The docstring also names a nonexistent 'second' optical element (L1: 'distance from the first lens ... to the second one'). Severity stays major (not blocker): the step prompt's 'with given lens position and initial gaussian beam waist radius and position' weakly points at the encoded reading, so it is guessable, but the explicit API doc sends a literal solver to 0/3.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[1].function_header docstring (lines for z, L1, s); same wrong text is mirrored in sub_steps[2].function_header and problem_io and must be fixed there too",
+        "before": "    - z: A 1d numpy array of float distances (in meters) from the lens where the waist size is to be calculated.\n    ...\n    - L1: float, The distance (in meters) from the first lens or optical element to the second one in the optical system.\n    - s: float, the distance (in meters) from the source (or initial beam waist) to the first optical element.",
+        "after": "    - z: A 1d numpy array of absolute positions (in mm) along the propagation axis at which the waist size is to be calculated. The initial beam waist sits at z = s and the lens at z = L1: for z < L1 the beam propagates freely from the waist; for z >= L1 it has additionally passed through the lens Mf1.\n    ...\n    - L1: float, position of the lens on the z axis (in mm).\n    - s: float, position of the initial beam waist on the z axis (in mm).",
+        "side_effects": "No target change (targets already encode this geometry). Also fixes 28.3's inherited docstring and problem_io; makes 28.3 test 4 (waist locally maximal at the lens) consistent with the documentation."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "28.1",
+      "defect_type": "D4",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "Reproduced all three variants myself (shimmed joint runner). (a) Self-consistent fftfreq(N+1, d=L/N) + Fresnel TF: FAILS all 3 tests; measured P2 rel errors 3.10e-3/1.61e-3/1.91e-3 vs allclose allowance (atol-dominated) 1.43e-3/8.5e-4/7.8e-4. (b) fftfreq(N+1, d=L/(N+1)) (spacing 1/L) + Fresnel TF: PASSES, P2 rel err down to 2.4e-16. (c) Exact angular-spectrum kernel with the same 1/L spacing: PASSES. So the kernel is not the discriminator, only the unstated frequency spacing. The grids are genuinely mutually inconsistent: P1 target = pi*w0^2 to 2.8e-12 pins the SPATIAL grid to linspace(-L/2,L/2,N+1) (dx=L/N), while P2 pins the FREQUENCY grid to df=1/L; no single sampling convention yields both. Stronger than first pass: the exact analytic free-space solution |E|=(w0/w)exp(-r^2/w^2) fails ALL 3 tests (rel err -3.5e-3/-1.6e-3/-2.5e-2), so the targets encode the author's discrete FFT artifact (incl. window truncation/wrap-around), not the physics; nothing in prompt/background/docstring states the discretization.",
+      "fix": {
+        "kind": "prompt_edit",
+        "target_location": "sub_steps[0].step_description_prompt, final sentence",
+        "before": "The calculation needs to be done in fourier domain and the final result should be in time domain.",
+        "after": "The calculation needs to be done in fourier domain and the final result should be in time domain. Sample the field on x = np.linspace(-L/2, L/2, N+1) (spacing L/N) and use spatial frequencies with spacing 1/L, i.e. fx = np.fft.fftfreq(N+1, d=L/(N+1)), with the Fresnel transfer function H = exp(-1j*np.pi*Ld*z*(fx**2+fy**2)).",
+        "side_effects": "No target change. Alternative (weaker): loosen the test comparison to ~5e-3 relative on (P1,P2) so both common spacings pass - but the analytic solution would still fail test 3 (2.5e-2 off), so the prompt_edit is the honest fix."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "28.1",
+      "defect_type": "D4",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "medium",
+      "reproduction": "Verified the targets myself: test-1 target P1 = 3.141592653581e-06 = pi*w0^2 (rel diff 2.8e-12), test-2 rel diff 8.6e-14 -> unit PEAK amplitude E0=exp(-r^2/w0^2) is what the targets encode (test 3's 3.1e-4 offset is just window truncation of the same unit-peak field, matched to 1e-14 by the discrete sum). Unit-total-power normalization variant (sum|E|^2 dA = 1): FAILS all 3 tests (ran it). The background explicitly writes E = c/omega(z) * exp(...) with 'c is a constant' never given, and the docstring says only 'absolute value of the beam's amplitude distribution' - keeping the literal 1/omega(z) prefactor with c=1 gives peak 1/w0 and P1 = pi*w0, also wrong. Confidence medium (kept from first pass): unit-peak is the most common default in FFT beam-propagation code, so many solvers land on it naturally, but it is strictly an unstated choice.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[0].function_header docstring, Gau output line",
+        "before": "    Gau:     a 2D array with dimensions (N+1, N+1) representing the absolute value of the beam's amplitude distribution before propagation.",
+        "after": "    Gau:     a 2D array with dimensions (N+1, N+1) representing the absolute value of the beam's amplitude distribution before propagation, normalized to unit peak amplitude: E(x,y,0) = exp(-(x^2+y^2)/w0^2).",
+        "side_effects": "No target change. Overlaps with the discretization prompt_edit above; both can be merged into one sentence."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "28.3",
+      "defect_type": "D10",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "Inspected the h5 targets myself: Intensity target corner value It[0,0] = 0.969812/0.990954/0.991588 = exp(-rc^2/w_min^2) EXACTLY (amplitude); the physical intensity value would be exp(-2*rc^2/w_min^2) = 0.940535/0.981990/0.983247. Ran both variants (shimmed joint runner): returning the amplitude map passes 4/4; returning |E|^2 (what 'intensity' means in optics, and what the docstring/problem_io/step prompt all say: 'The intensity distribution at new fcous after the lens') FAILS tests 1-3. A solver who implements the word 'intensity' correctly scores 0 on the array slot.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[2].function_header docstring + sub_steps[2].step_description_prompt + problem_io (Intensity output line)",
+        "before": "    Intensity: float 2D array; The intensity distribution at new fcous after the lens",
+        "after": "    Intensity: float 2D array; the absolute field AMPLITUDE distribution at the new focus (unit peak), i.e. the before-propagation output of propagate_gaussian_beam evaluated with waist min(Wz) on the same (N+1,N+1) window.",
+        "side_effects": "No target change. Alternative: target_regen (square the three frozen (801,801) arrays, It_new = It_old**2) and keep the word 'intensity' - cleaner physics but touches the h5 file."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "28.3",
+      "defect_type": "D4",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Target focus_depth = 210.5105105105/240.5405405405/222.5225225225 = z[np.argmin(Wz)] exactly (grid values of linspace(0,300,1000)). Computed the exact analytic focus via the ABCD image myself: 210.438942/240.564182/222.423624 -> |diff| = 0.072/0.024/0.099 vs np.allclose allowance 2.1e-3/2.4e-3/2.2e-3. Ran the analytic-focus variant: FAILS (cmp_tuple_or_list test 1). The default route (argmin of the just-computed Wz) passes, so most solvers are safe; the more careful physical answer is punished. Minor confirmed; confidence raised to high (clean reproduction).",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[2].function_header docstring + problem_io, focus_depth output line",
+        "before": "    focus_depth: float; new focus position through lens  ",
+        "after": "    focus_depth: float; new focus position through lens, taken as the z-grid value where Wz is minimal (focus_depth = z[np.argmin(Wz)]).",
+        "side_effects": "No target change."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "28.1",
+      "defect_type": "D8",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Ran a deliberately wrong implementation returning np.fft.fftshift of both arrays (beam split into the four corners of the window - spatially scrambled): PASSES all 3 tests under the shim, because the tests only assert the permutation-invariant scalars P = sum(gau)*dA. The documented 2D spatial output is never structurally checked, so classic fftshift/flip bugs score full marks on 28.1.",
+      "fix": {
+        "kind": "test_edit",
+        "target_location": "sub_steps[0].test_cases[0..2] (add one structural assertion each)",
+        "before": "assert np.allclose((P1, P2), target)",
+        "after": "assert np.allclose((P1, P2), target[:2]) and np.allclose(gau2[N//2], target[2])  # center row of the propagated field",
+        "side_effects": "Requires re-freezing the 28.1 h5 targets to a 3-tuple (P1, P2, center_row) generated from the reference implementation (unit-peak input, fx spacing 1/L, Fresnel TF). Low priority: false-positive risk only."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "28.3",
+      "defect_type": "D3",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Static: 28.2/28.3 docstrings declare z, L1, s, R0 '(in meters)' while every test input is in mm ('# Wavelength in mm', '# Distance in mm'). 28.3 tests pass L = 16*10**-3, which in the mm system is 16 um - a window 4x SMALLER than the focal waist (w_min = 64.6/118.7/123.1 um, read from the h5 Wz targets), clearly copy-pasted from 28.1 test 2 where L=16e-3 METERS = 16 mm. Verified the consequence in the h5: the 'focal intensity' targets are near-flat arrays with all values in [0.9698, 1.0]. Ran the unit-aware variant (window corrected to 16 mm): FAILS test 1. Pure pass-through reproduces the target, so scoring impact is minor, but the unit slip is baked into the frozen arrays.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[1] and sub_steps[2] function_header docstrings + problem_io: every '(in meters)' annotation",
+        "before": "(in meters)",
+        "after": "(in mm; pass all lengths through without unit conversion)",
+        "side_effects": "No target change; keeps the physically silly 16-um window but makes scoring honest. The clean alternative is test_edit (L = 16 in 28.3's four tests) + target_regen of the three (801,801) arrays - heavyweight for a minor finding."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "28.1",
+      "defect_type": "D10",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Static, quoted from sub_steps[0].step_background verbatim: '\\\\mathrm{e}^{-\\\\mathrm{i}\\\\left\\\\{k\\\\left[z+\\\\frac{x^2+y^2}{2 R(z)}\\\\right] \\\\arctan \\\\frac{z}{f}\\\\right\\\\}}' - the Gouy term arctan(z/f) MULTIPLIES the propagation phase; the correct expression subtracts it. And 'At z=±f, ω(±f)=2√ω0.' - should be √2·ω0 (the formula two lines above gives w0*sqrt(2) at z=f). Neither can flip scores (only |E| is graded; the identity is unused), but the background teaches wrong equations. Minor confirmed.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[0].step_background (two spots)",
+        "before": "\\left[z+\\frac{x^2+y^2}{2 R(z)}\\right] \\arctan \\frac{z}{f}  ...  At z=±f, ω(±f)=2√ω0.",
+        "after": "\\left[z+\\frac{x^2+y^2}{2 R(z)}\\right]-\\arctan \\frac{z}{f}  ...  At z=±f, ω(±f)=√2·ω0.",
+        "side_effects": "None (cosmetic, no targets involved)."
+      },
+      "uncertainty_notes": null
+    }
+  ],
+  "missed_defects": [
+    {
+      "step_number": "28.1",
+      "defect_type": "D10",
+      "severity": "minor",
+      "confidence": "medium",
+      "evidence": "return_line is '    return Gau, Gau_pro' (lowercase p) while the function_header docstring names the second output 'Gau_Pro'. A model that names its variable per the docstring but keeps the scaffolded return line gets a NameError. Cosmetic-to-minor; most models write self-consistent bodies.",
+      "fix": {
+        "kind": "header_edit",
+        "target_location": "sub_steps[0].return_line",
+        "before": "    return Gau, Gau_pro",
+        "after": "    return Gau, Gau_Pro",
+        "side_effects": "None."
+      }
+    }
+  ],
+  "summary": "All 9 first-pass findings reproduce exactly and are confirmed at their original severities: the simps import (D12) zeroes all three steps under official scoring before any solver code runs, and behind a shim each step still hides an author-private convention (28.1: df=1/L frequency spacing inconsistent with the dx=L/N spatial grid, plus unit-peak normalization of an unspecified constant; 28.2: docstring geometry that scores 0/3 while targets encode absolute-z/waist-at-s/lens-at-L1, matched to 1.7e-16; 28.3: 'Intensity' target that is actually an amplitude map, grid-argmin focus, and a 16-um-window unit slip baked into the frozen arrays). One small strengthening: the exact analytic free-space solution fails ALL three 28.1 tests, not just test 3. The problem is fixable to fair with moderate effort and zero target regeneration: one dependency-string fix plus four doc/prompt edits (28.2 geometry, 28.1 discretization+normalization, 28.3 amplitude-vs-intensity and focus convention) make every confirmed target derivable; the two remaining minors (permutation-invariant 28.1 tests, 16-um window) only need fixing if false positives / unit honesty matter."
+}

@@ -1,0 +1,61 @@
+{
+  "problem_id": "40",
+  "split": "test",
+  "reviewer_model": "fable",
+  "steps_reviewed": 3,
+  "steps": [
+    {
+      "step_number": "40.1",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Ghost-cell centered second difference; straightforward impl passes all 3 tests. Targets for tests 0 and 1 are both 0.0 (degenerate), but test 2 (-2200, right boundary) discriminates: trivial `return 0` fails joint, reflective-ghost variant fails test 2. Left-boundary ghost convention is only probed with u[0]==u[1] data (any ghost choice gives 0 there) - mild but not score-flipping, not flagged."
+    },
+    {
+      "step_number": "40.2",
+      "static_ok": false,
+      "dynamic_status": "pass",
+      "notes": "Passes ONLY with f0=reaction (half steps) / f1=diffusion (full step); the equally-plausible f0=diffusion assignment fails (maxerr large). Assignment is nowhere stated -> D4. Prompt calls it 'first order strang splitting' while background says Strang is O(dt^2) -> minor D10."
+    },
+    {
+      "step_number": "40.3",
+      "static_ok": false,
+      "dynamic_status": "pass",
+      "notes": "Passes ONLY with reverse-engineered conventions: dx = dt/CFL, N = round(2/dx)+2 grid points, nsteps = round(T/dt)+1 (final time T+dt), reaction-first Strang. Natural reading (diffusive CFL dx=sqrt(alpha*dt/CFL), arange grid, T/dt steps) fails with shape mismatch (30,) vs (42,)."
+    }
+  ],
+  "findings": [
+    {
+      "step_number": "40.2",
+      "defect_type": "D4",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "Background defines Strang generically: 'taking a half-step with the f_0 operator, a full step with the f_1 operator, and then another half-step with the f_0 operator' but NEVER says which physical operator (diffusion alpha*f''(u) or reaction u^2) is f_0. The main equation 'du/dt = alpha f''(u) + u^2' lists diffusion first, so f0=diffusion is at least as natural. Dynamic test: reaction-first variant (u_hat = u + dt/2*u^2; u_tilde = u_hat + dt*alpha*D2(u_hat); u_check = u_tilde + dt/2*u_tilde^2) -> steptest PASS (all 3 tests). Diffusion-first variant (half-diffusion / full-reaction / half-diffusion) -> steptest FAIL (test 0 AssertionError; e.g. cell 0 of test 0 gives -0.9 vs target -0.904875). A competent solver faces a coin flip; the wrong choice scores 0.",
+      "suggested_fix": "Add to the step prompt/docstring: 'Use f_0 = the reaction term u^2 (half steps) and f_1 = the diffusion term alpha*u_xx (full step), each advanced with one forward-Euler step. Use second_diff with its ghost-cell boundary treatment for the diffusion operator.'"
+    },
+    {
+      "step_number": "40.2",
+      "defect_type": "D10",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "Step prompt: 'Write a function performing first order strang splitting at each time step'. Step background in the same step: 'The accuracy ... can be enhanced from O(\\Delta t) to O(\\Delta t^2) by employing Strang splitting.' Strang splitting is second order by definition; 'first order strang splitting' is self-contradictory (the same phrase 'first order strang spliting scheme' also appears in problem_description_main and step 40.3). The full algorithm is spelled out in the background, so this confuses but does not block.",
+      "suggested_fix": "Drop 'first order' (or replace with 'Strang (second-order) splitting'); keep 'first-order forward Euler' only for the sub-step integrator."
+    },
+    {
+      "step_number": "40.3",
+      "defect_type": "D2",
+      "severity": "blocker",
+      "confidence": "high",
+      "evidence": "The spatial grid is not derivable from the prompt. Inputs are only 'CFL : Courant-Friedrichs-Lewy condition number, T, dt, alpha'; domain 'x in [-1,1]' from the main description. The targets encode dx = dt/CFL (an ADVECTIVE CFL=dt/dx that does not involve alpha) and N = round(2/dx)+2 grid points (test shapes 42/14/22 = exact 2/dx + 2; note int(2/dx)+2 already fails test 1 because fp gives 2/dx=11.999999999999998). For a diffusion-reaction equation the standard 'CFL number' is the diffusive one, alpha*dt/dx^2, giving dx=sqrt(alpha*dt/CFL) and entirely different grids (e.g. test 0: 28-30 points vs target 42). Dynamic proof: reverse-engineered impl (review/work/40/step_40.3_reveng.py: dx=dt/CFL, N=round(2/dx)+2, nsteps=round(T/dt)+1, reaction-first Strang) -> steptest PASS; natural reading (review/work/40/step_40.3_natural.py: dx=sqrt(alpha*dt/CFL), x=arange(-1,1+dx,dx), round(T/dt) steps) -> FAIL 'operands could not be broadcast together with shapes (30,) (42,)'. No correct solution can pass without reverse-engineering three independent unstated choices (dx rule, +2 grid points, step count).",
+      "suggested_fix": "State the discretization explicitly in the prompt, e.g.: 'Set dx = dt/CFL. Discretize [-1,1] with N = round(2/dx)+2 equally spaced points (2/dx interior cells plus 2 boundary/ghost cells, all included in the returned array). Initialize u_i = -1 where x_i < 0 and u_i = +1 where x_i >= 0.' Alternatively regenerate targets from a conventional construction and document it."
+    },
+    {
+      "step_number": "40.3",
+      "defect_type": "D7",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "Docstring says 'T : Max time, float', i.e. the returned u should be the solution at t = T. The frozen targets are the solution after round(T/dt)+1 steps, i.e. at t = T + dt (off-by-one, consistent with a `for t in np.arange(0, T+dt, dt)` loop in the reference). Dynamic proof with the otherwise-correct grid: nsteps=int(T/dt) -> maxerr 2.6e-2 / 1.9e-1 / 3.1e-2 on tests 0/1/2 (FAIL); nsteps=round(T/dt)+1 -> exact MATCH on all 3. Note int(T/dt)+1 also fails test 1 (maxerr 1.0e-1) because T/dt = 5.999999999999999; only round(T/dt)+1 (equivalently len(np.arange(0,T+dt,dt))) matches all targets. Even a solver who guessed the entire grid construction would fail on the step count.",
+      "suggested_fix": "Regenerate targets with exactly round(T/dt) time steps (solution at t = T), or amend the prompt: 'advance the solution round(T/dt)+1 time steps (i.e. for t in np.arange(0, T+dt, dt))'."
+    }
+  ],
+  "overall_assessment": "Steps 40.1 and 40.2 are mechanically consistent, but 40.2 is fair only if the solver guesses the unstated f0=reaction/f1=diffusion assignment (50/50). Step 40.3 is effectively unscoreable as written: the targets encode an advective-style dx=dt/CFL rule (alpha unused) for a diffusion problem, a grid of round(2/dx)+2 points, and an off-by-one time loop ending at T+dt - none derivable from the prompt; the natural expert reading fails with a shape mismatch before values are even compared. The problem needs its discretization spelled out (or targets regenerated) before it can fairly score a competent solver."
+}

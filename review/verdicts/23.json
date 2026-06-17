@@ -1,0 +1,27 @@
+{
+  "problem_id": "23",
+  "verifier_model": "fable",
+  "n_confirmed": 3, "n_refuted": 0, "n_uncertain": 0,
+  "verdicts": [
+    {"step_number": "23.3", "defect_type": "D6",
+     "verdict": "confirmed",
+     "tier": "C",
+     "revised_severity": null,
+     "fix_kind": "target_regen",
+     "one_liner": "Reproduced with reviewer's scratch: seed-0 e=1e-5 stop gives 0.073166717019552 (matches target to 1e-17) vs C*=0.07319398616 at e=1e-14, gap 2.73e-5 >> allclose tol 7.4e-7; 2**D variant off 1.16e-5 and uniform init off 1.13e-6 both fail as claimed."},
+    {"step_number": "23.3", "defect_type": "D4",
+     "verdict": "confirmed",
+     "tier": "A",
+     "revised_severity": null,
+     "fix_kind": "prompt_edit",
+     "one_liner": "Quotes accurate: main description uses \\exp(D(...)) with an unbalanced paren while step 23.1 mandates log base 2; minor severity is right since impact exists only via the fragile test 3."},
+    {"step_number": "23.3", "defect_type": "D8",
+     "verdict": "confirmed",
+     "tier": "A",
+     "revised_severity": null,
+     "fix_kind": "test_edit",
+     "one_liner": "Read general_tests: test 6 is a character-for-character copy of test 1 and test 7 of test 4 (same channel, same e), pure redundancy."}
+  ],
+  "missed_defects": [],
+  "summary": "All 3 findings confirmed: test 3's frozen unconverged target (D6, numbers reproduce exactly), the exp-vs-base-2 typo with unbalanced paren (D4), and verbatim duplicate tests 6/7 (D8). Problem is fixable to fair with one regenerated target plus the suggested prompt/test edits."
+}

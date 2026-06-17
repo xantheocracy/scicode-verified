@@ -1,0 +1,99 @@
+{
+  "problem_id": "24",
+  "split": "test",
+  "verifier_model": "fable",
+  "verdicts": [
+    {
+      "step_number": "24.1",
+      "defect_type": "D7",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "Loaded h5 targets myself: middle cell = +0.4444444444444444 (= +4/9) in ALL three tests (indices 4/49/14 for n_x=10/100/30; all odd cell counts so the middle cell is centered at x=0 and the 3-pt Gauss central node sits exactly there). Prompt states 'sin(x)-1 for -pi/2 < x <= 0', so u(0) = -1 and the Gauss middle cell should be -4/9; +4/9 encodes u(0)=+1, contradicting the prompt. Wrote my OWN four variants in review/work/24/verify/ and ran steptest (joint=official): v_faithful_mid.py (np.where(x<=0,...), midpoint node) -> FAIL; v_flipped_mid.py (np.where(x<0,...), midpoint node) -> PASS; v_flipped_affine.py (x<0 branch, textbook map x_i+h*(t+1)/2) -> FAIL; v_exact.py (exact analytic cell averages, middle cell = 0 exactly) -> FAIL. Node arithmetic verified: midpoint formula gives exactly 0.0 for n=10/30 (linspace AND arange grids). One nuance the first pass overstated: for n=100 the central node rounds to +1.11e-16 > 0, so the faithful impl passes test 2 under --isolate (1/3 isolated); official joint verdict is FAIL regardless. The blocker stands: prompt-faithful fails, exact-math-correct fails, and the only passing variant both contradicts the stated IC at x=0 and depends on a specific FP rounding of the node formula.",
+      "fix": {
+        "kind": "test_edit",
+        "target_location": "sub_steps[0].test_cases[0..2] (problem 24.1) + h5 group '24.1' targets 1-3",
+        "before": "n_x = 10 / n_x = 100 / n_x = 30 (odd cell counts 9/99/29: middle cell centered on the x=0 discontinuity, Gauss node exactly on it)",
+        "after": "n_x = 11 / n_x = 101 / n_x = 31 (even cell counts 10/100/30: discontinuity on a vertex, no quadrature node touches it) and regenerate the three 24.1 targets",
+        "regen_recipe": "Run review/work/24/verify/v_faithful_mid.py's make_IC(n) for n in (11, 101, 31) and store as the new h5 targets (shapes 10/100/30). Verified all four implementation variants (branch <=0 vs <0, midpoint vs affine node map) then agree to <= 4.4e-16: e.g. n=11 -> first3 [-1.98363164, -1.88734692, -1.70420251], mid pair [-1.15579195, +1.15579195]; n=31 mid pair [-1.05231205, +1.05231205]; n=101 mid pair [-1.01570667, +1.01570667].",
+        "side_effects": "Only step 24.1's three h5 targets change. Step 24.3 is untouched (its own tests already use n_x=31/21/11 with even cell counts and its targets are independent). Alternative cheaper fix (target_regen only, middle cell -> -4/9 with unchanged n_x) repairs the prompt contradiction but NOT the companion D6 fragility, so the test_edit is recommended."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "24.1",
+      "defect_type": "D6",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "Reproduced the last-bit-rounding sensitivity with my own code: central Gauss node of the middle cell computed as 0.5*(x[i]+x[i+1]) = exactly 0.0 for n=10/30, but as x[i]+h*(t+1)/2 (algebraically identical textbook affine map) = -2.7755575615628914e-17 (n=10) / -2.0816681711721685e-17 (n=30); for n=100 BOTH maps give a positive ~1e-16 value. steptest: v_flipped_mid.py PASS vs v_flipped_affine.py FAIL (official joint; isolated 1/3 — only n=100 passes). So among the four (branch)x(node-map) combinations exactly one passes, decided by invisible float rounding at the discontinuity, not by correctness. Same root cause as the D7 finding.",
+      "fix": {
+        "kind": "test_edit",
+        "target_location": "Same as the 24.1 D7 fix: sub_steps[0].test_cases n_x values + h5 '24.1' targets",
+        "before": "n_x = 10/100/30 (Gauss node coincides with the x=0 discontinuity)",
+        "after": "n_x = 11/101/31 + regenerated targets (see D7 regen_recipe). After the change, all four variants agree to <= 4.4e-16, eliminating the rounding sensitivity entirely.",
+        "regen_recipe": "Shared with the D7 fix (one regeneration covers both findings).",
+        "side_effects": "None beyond the D7 fix; both findings are repaired by the single test_edit."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "24.2",
+      "defect_type": "D4",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Targets read directly: -0.75, 4.5, 22.5. Analytic check: LF = 0.5*(uL^2/2 + uR^2/2 - alpha*(uR-uL)); test0 (0,1) -> 0.25 - alpha/2 = -0.75 only for alpha=2 (local alpha=1 gives -0.25); test2 (5,-5) -> 12.5 + 5*alpha = 22.5 only for alpha=2 (local alpha=5 gives 37.5); test1 (3,3) is alpha-independent. steptest: v_242_global.py (alpha=2 hardcoded) -> PASS; v_242_local.py (Rusanov max(|uL|,|uR|)) -> isolated 1/3, official FAIL. The '= 2' appears only in step_background; the step description says 'maximum wave speed as the global Lax-Friedrichs stability parameter' while tests feed |u| up to 5, outside the IC range [-2,2]. Severity minor is right: 'global' rules out the local reading, and alpha = max|u0| = 2 is derivable from the main description's IC, so a careful solver passes without the background — but it is a real trap for the standard local-LF reflex.",
+      "fix": {
+        "kind": "prompt_edit",
+        "target_location": "sub_steps[1].step_description_prompt (problem 24, step 24.2)",
+        "before": "Using maximum wave speed as the global Lax-Friedrichs stability parameter, $\\alpha_{LF}$.",
+        "after": "Using the maximum wave speed of the initial condition as the global Lax-Friedrichs stability parameter, i.e. the fixed value $\\alpha_{LF} = \\max|u_0| = 2$.",
+        "regen_recipe": null,
+        "side_effects": "None: targets already encode alpha=2; step 24.3's targets also encode alpha=2, so the edit makes the whole chain self-consistent."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "24.1",
+      "defect_type": "D10",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Static check of review/problems/24.json sub_steps[0].step_description_prompt, quoted verbatim: 'The output will be cell-averaged values, an array of length n-The numerical integral should be performed with three-point Gauss quadrature rule.' — the '1.' after 'n-' is missing. Recoverable from the docstring ('v : cell averaged approximation of initial condition, 1d array size n-1') and the h5 target shapes (9/99/29 for n=10/100/30), so minor is correct.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[0].step_description_prompt",
+        "before": "an array of length n-The numerical integral should be performed",
+        "after": "an array of length n-1. The numerical integral should be performed",
+        "regen_recipe": null,
+        "side_effects": "None."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "24.3",
+      "defect_type": "D10",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Static check, quoted verbatim from review/problems/24.json: sub_steps[2].step_description_prompt reads '...using the initial conditon and Lax-Friedrichs functions from and .' (dangling step references). problem_io declares inputs 'a : left end of physical domain' / 'b : right end' and output 'S : solution matrix, 2d array size (n_t-1) * (n_x-1)', while the scored header is solve(n_x, n_t, T) returning 'u1 : solution vector, 1d array of size n_x-1' (h5 target shapes 30/20/10 confirm the 1d final snapshot). Also dynamically confirmed the docstring contract is the real one: my v_243_full.py (domain [-pi/2,pi/2] inferred from IC, dt=T/(n_t-1), ghost-copy free BC, alpha=2) PASSES official joint with EITHER 24.1 branch choice (v_243_full.py and v_243_flip.py both PASS — n_x=31/21/11 give even cell counts so 24.3 is insulated from the 24.1 defect), and dt=T/n_t FAILS (v_243_dtn.py), so the tests pin the natural reading. Minor is correct.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[2].step_description_prompt and problem_io",
+        "before": "'...using the initial conditon and Lax-Friedrichs functions from and .' ; problem_io lists inputs a, b and output 'S : solution matrix, 2d array size (n_t-1) * (n_x-1)'",
+        "after": "'...using the initial condition function (step 24.1) and the Lax-Friedrichs flux function (step 24.2).' ; problem_io: drop a/b, state the fixed domain [-pi/2, pi/2], and declare the output 'u1 : solution at final time T, 1d array of size n_x-1'",
+        "regen_recipe": null,
+        "side_effects": "None: targets and header already match the corrected text."
+      },
+      "uncertainty_notes": null
+    }
+  ],
+  "missed_defects": [],
+  "summary": "All 5 first-pass findings confirmed at their original severities (1 blocker, 1 major, 3 minor); none refuted, none uncertain. The 24.1 blocker is real and fully reproduced: frozen targets put +4/9 in the middle cell of every test (u(0)=+1) while the prompt assigns x=0 to the sin(x)-1 branch (u(0)=-1), and pass/fail additionally hinges on last-bit rounding of the Gauss node at the discontinuity — prompt-faithful, exact-analytic, and textbook-affine-map implementations all FAIL official scoring. One small evidence correction: the faithful impl passes the n_x=100 test in isolation (node rounds to +1.11e-16), though the official joint verdict is FAIL either way. The problem is fixable to fair with modest effort: a single test_edit (24.1 n_x 10/100/30 -> 11/101/31 + regenerating three targets, recipe and values provided) repairs both 24.1 findings at once; the remaining three are one-line prompt/doc edits with no target changes. Steps 24.2 and 24.3 score fairly as-is."
+}

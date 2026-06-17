@@ -1,0 +1,55 @@
+{
+  "problem_id": "12",
+  "split": "test",
+  "reviewer_model": "fable",
+  "steps_reviewed": 14,
+  "steps": [
+    {"step_number": "12.1", "static_ok": true, "dynamic_status": "pass",
+     "notes": "f(r)=l(l+1)/r^2-2Z/r-eps with Z=1; fully specified in background; 3/3 pass."},
+    {"step_number": "12.2", "static_ok": true, "dynamic_status": "pass",
+     "notes": "Standard Numerov with linear start u[1]=u0+step*up0 passes 3/3; BUT targets are ~1e-8, same scale as np.allclose default atol -- see D8 finding."},
+    {"step_number": "12.3", "static_ok": true, "dynamic_status": "pass",
+     "notes": "3/3 pass. Param names 'u_at_0/up_at_0' actually mean initial values at the STARTING point of the inward integration (r_max), but 'Do the integration from the largest radius' makes the intent recoverable; sign/scale of start cancels under normalization."},
+    {"step_number": "12.4", "static_ok": true, "dynamic_status": "pass",
+     "notes": "Linear extrapolation to r=0 from first two points of ur/r^l; 3/3 pass."},
+    {"step_number": "12.5", "static_ok": true, "dynamic_status": "pass",
+     "notes": "Sign-change scan over energy_grid + brentq, cap 10 states, (l,E) tuple order given in docstring; 3/3 pass; result robust to brentq xtol choice."},
+    {"step_number": "12.6", "static_ok": true, "dynamic_status": "pass",
+     "notes": "3/3 pass. The l/10000 tiebreak is explicitly specified AND genuinely constraining: plain energy-only sort FAILS the target (verified) because numerically near-degenerate hydrogen levels reorder."},
+    {"step_number": "12.7", "static_ok": true, "dynamic_status": "pass",
+     "notes": "3/3 pass with rho = sum occ * u^2/(4 pi r^2), occ = ferm * 2(2l+1). The 4*pi*r^2 division and spin factor are not literally stated in 12.7, but are pinned by step 12.8's background (U''=-8 pi r rho requires 3D density) and standard atomic physics; verified wrong variants (no 4 pi r^2; spinless 2l+1) both FAIL, so tests are constraining."},
+    {"step_number": "12.8", "static_ok": true, "dynamic_status": "pass",
+     "notes": "3/3 pass. Inhomogeneous-Numerov + alpha*r boundary fix per background. Robust by construction: the alpha correction pins U(0)=0, U(rmax)=2Z, so result is insensitive to the (oddly negative) step sign and to up_at_0."},
+    {"step_number": "12.9", "static_ok": true, "dynamic_status": "pass",
+     "notes": "f = l(l+1)/r^2 + (U-2Z)/r - eps given verbatim in background; 3/3 pass. (Prompt says 'express u(r)' where it means f(r); return_line/docstring say f_r -- harmless typo.)"},
+    {"step_number": "12.10", "static_ok": true, "dynamic_status": "pass",
+     "notes": "3/3 pass reusing 12.3's conventions (u0=0, up0=-1e-7, inward from r_max, step=r[0]-r[1]); these are not restated here but the mirror-of-12.3 reading is unambiguous. Text has dangling cross-references ('defined in prompts and ') but function names are given in parentheses."},
+    {"step_number": "12.11", "static_ok": true, "dynamic_status": "pass",
+     "notes": "np.polyfit deg-3 over first 4 points of ur/r^l, eval at 0; 3/3 pass. Target t3 ~1.7e12 (numerical noise amplified by r^-l at r=1e-8) but deterministic."},
+    {"step_number": "12.12", "static_ok": true, "dynamic_status": "pass",
+     "notes": "Same scan+brentq structure as 12.5 with extrapolate_polyfit; 3/3 pass."},
+    {"step_number": "12.13", "static_ok": true, "dynamic_status": "pass",
+     "notes": "3/3 pass; total_energy = sum E*2(2l+1)*ferm as specified. Docstring says input found by 'find_bound_states' while prompt says 'find_bound_states_Hartree' -- cosmetic only (input is just a list of tuples)."},
+    {"step_number": "12.14", "static_ok": false, "dynamic_status": "pass",
+     "notes": "First honest expert attempt FAILED 0/3; passes 3/3 (confirmed for all of Z=8,16,6) only after reverse-engineering the author's exact SCF loop/reporting structure via a 12-variant search (see D4 finding). Also heavy: ~150-200 s per test with a reasonable pure-Python Numerov -- exceeds steptest's 120 s default; official harness runs all 3 tests in one script under 1800 s, which fits (~450-600 s) but leaves little headroom for slower-but-correct implementations."}
+  ],
+  "findings": [
+    {
+      "step_number": "12.14",
+      "defect_type": "D4",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "Prompt only says: 'The mixing ratio between old and new charge densities is 0.5 ... If an integration method is used to solve for the second term in the total energy, i.e. $\\int d\\vec{r} \\rho(\\vec{r}) [-\\epsilon_H(\\vec{r})]$, normalize the result using Simpson's rule.' With the test inputs (tolerance=1e-7, iteration=10) the SCF is NOWHERE NEAR converged at the 10-iteration cap: successive-iterate total energies still oscillate by ~0.5 Ry (it7..it9 band energies -69.996, -70.583, -69.744), so the frozen target encodes one specific unconverged 10th iterate and every unstated loop/reporting choice changes the answer by orders of magnitude more than the pass tolerance (~1.3e-3 Ry via np.allclose rtol on E=-133). Measured on test 1 (Z=8, target E=-133.06806083): 12 reasonable convention combinations [trajectory: mix-from-first-iteration-with-rho_old=0 vs no-mixing-on-first-iteration] x [E2 density: raw new vs mixed] x [E2 potential U: pre-update U used in the eigen-solve vs U recomputed from mixed rho vs U from raw rho] give Etot in {-132.066, -132.564(x2), -133.062, -133.068, -133.572, -134.112, -134.149, -134.152, -134.187(x2), -134.227}; EXACTLY ONE matches: no first-iteration mixing, U updated from mixed density, E2 = -simpson(rho_mix * U_new/(2r) * 4*pi*r^2), returned density = mixed (rho maxdiff 8.2e-8). My first literal-reading implementation (identical except E2 evaluated with the pre-update U that generated the eigenvalues -- an equally defensible double-counting convention) failed all 3 tests: -133.5719 vs -133.0681, 380x the tolerance. Returning the raw (unmixed) final density also fails (maxdiff 0.083 vs target).",
+      "suggested_fix": "Either (a) make the target convention-insensitive by letting the SCF actually converge before the cap (raise iteration to ~60 with mixing 0.5, or loosen tolerance to ~1e-5 and assert only the converged values), since at the fixed point all pairings coincide; or (b) state the loop explicitly in the prompt: 'per iteration: solve bound states with current U; build rho_new and band energy; mix rho = 0.5*rho_old + 0.5*rho_new (no mixing on the first iteration); recompute U from the mixed rho; total_energy = band_energy - simpson(rho * U/(2r) * 4*pi*r^2, x=r_grid); return the mixed density and the last total_energy.'"
+    },
+    {
+      "step_number": "12.2",
+      "defect_type": "D8",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "Tests pass up_at_0=-1e-10 with step ~ -0.526, so the whole solution has magnitude <= 2.1e-8 -- the same scale as np.allclose's default atol=1e-8. Verified against the frozen targets: an all-zeros array PASSES tests 2 and 3 (max|target| = 1.64e-9 and 7.95e-9 < atol); for test 2, 0.5x, 2x and even sign-NEGATED outputs all pass. Uniform scale errors of +/-10% pass all three tests. Step credit still requires test 1 (max|target|=2.09e-8), which rejects zeros/half/double/negated, so a totally wrong solution is caught, but the suite verifies the integrator only to ~10% amplitude -- e.g. a non-Numerov O(h^2) integrator solving the same ODE would pass, and 2 of 3 test cases are individually vacuous.",
+      "suggested_fix": "Regenerate targets with a starting slope that is not absorbed by atol (e.g. up_at_0 = -1e-3 in the 12.2 test calls only), or assert with np.allclose(..., atol=0) / compare the solution normalized to unit max."
+    }
+  ],
+  "overall_assessment": "Steps 12.1-12.13 are fair and well-posed: every step passed a first-attempt literal-reading expert implementation (13/14 steps, 39/39 test cases), targets are non-degenerate, and the few unstated conventions (3D density = u^2/(4 pi r^2) with spin degeneracy 2(2l+1); reuse of 12.3's integration conventions in 12.10) are pinned by the surrounding backgrounds and verified to be the only passing readings. The serious defect is 12.14: the test fixes an UNCONVERGED 10th SCF iterate while the prompt leaves the loop/mixing/energy-reporting structure underdetermined -- 12 defensible conventions spread over ~2 Ry against a ~1e-3 Ry tolerance, and only one exact structure (recovered here only by search) passes, so competent solvers will commonly fail this step for non-physics reasons. Secondary: 12.2's targets sit at np.allclose's default atol, making 2 of its 3 test cases individually vacuous. Note for harness operators: 12.14 needs ~150-200 s per test case with a reasonable pure-Python implementation (steptest's 120 s default times out; the official 1800 s is sufficient)."
+}

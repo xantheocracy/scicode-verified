@@ -1,0 +1,91 @@
+{
+  "problem_id": "79",
+  "split": "test",
+  "reviewer_model": "fable",
+  "steps_reviewed": 4,
+  "steps": [
+    {
+      "step_number": "79.1",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Literal velocity-Verlet passes 3/3 bit-exactly; but all tests use x0=0 so the position-update force term is untested (D8)."
+    },
+    {
+      "step_number": "79.2",
+      "static_ok": false,
+      "dynamic_status": "partial",
+      "notes": "Spec-literal impl passes tests 1-2 (M=1) but FAILS test 3 (M=2); target requires using the PASSED-IN G for the first-sweep v_xiM kick instead of recomputing G_M as the background pseudocode prescribes. Bug-compatible impl reproduces all 3 targets bit-exactly."
+    },
+    {
+      "step_number": "79.3",
+      "static_ok": false,
+      "dynamic_status": "partial",
+      "notes": "Inherits 79.2's stale-G semantics: spec-literal nhc_step fails test 3 (M=2); also proved G must be CARRIED between the three Yoshida sub-calls (skip-G variant passes 79.2 but fails 79.3)."
+    },
+    {
+      "step_number": "79.4",
+      "static_ok": false,
+      "dynamic_status": "fail",
+      "notes": "Best achievable 1/3 (M=1 test only). M=2 NHC oscillator is chaotic (lambda~0.09/t.u.): tests 2-3 run 20000/40000 steps and require BIT-identical reproduction of the author's float op order; an impl bit-exact on all 9 targets of steps 1-3 still diverges to O(1) by step ~5000. Also docstring return shape (nsteps,1) contradicts (nsteps,) target."
+    }
+  ],
+  "findings": [
+    {
+      "step_number": "79.2",
+      "defect_type": "D7",
+      "severity": "blocker",
+      "confidence": "high",
+      "evidence": "Background pseudocode explicitly opens the M->1 sweep with 'G_M = (Q_{M-1} v_{xi_{M-1}}^2 - kT)/Q_M ; v_{xi_M} = v_{xi_M} + dt/4 * G_M'. For test 3 (M=2, V=X=G=zeros, T=0.1, dt=0.1, v0=2*sqrt(0.2)) a spec-literal implementation gives v_xi2 = -0.025 after the first sweep, hence xi2 = -0.00125 and v_xi2_final = -0.046994. The frozen target is X=[0.00875, 0.0], V=[0.34653045, -0.02199792], G=[6.86121789, -0.87991665], v=0.8866350932215905 -- xi2 == 0 exactly is only possible if the first-sweep kick of v_xi2 used the PASSED-IN G (zeros) instead of the freshly computed G_2=-1. A variant that recomputes only G_1 in the first sweep and uses the input G array for all outer elements reproduces ALL components of all 3 targets BIT-EXACTLY (review/work/79/impl_B_staleG.py), while the spec-literal variant (review/work/79/impl_A_spec.py) fails test 3 under official joint scoring (steptest: 'RESULT step 79.2: FAIL'). The target therefore encodes a reference bug that contradicts the documented algorithm; v also bit-matches the M=1 target (0.8866350932215905) proving the M-th thermostat update was a no-op. Note this is also not the standard MTK/Frenkel-Smit NHC integrator, which computes G_M fresh.",
+      "suggested_fix": "Regenerate the test-3 target with a reference that computes G_M = (Q_{M-1} v_{xi_{M-1}}^2 - kT)/Q_M fresh at the start of the first sweep (as the background states); alternatively rewrite the background to define the carried-G semantics ('the first sweep's v_xi kicks for k=M..2 use the G values passed into the function; only G_1 is recomputed')."
+    },
+    {
+      "step_number": "79.3",
+      "defect_type": "D7",
+      "severity": "blocker",
+      "confidence": "high",
+      "evidence": "79.3's targets were generated with the same buggy nhc_step, so the defect propagates: the spec-literal nhc_step (impl_A) fails 79.3 test 3 (M=2) under official scoring, while the stale-G variant (impl_B) matches all components bit-exactly except a single 1-ULP element (X[0] differs by 1.7e-18, within tolerance). Additionally, a variant that SKIPS the outer first-sweep kicks entirely (impl_C) passes 79.2 (indistinguishable when input G=0) but FAILS 79.3 (steptest: 'RESULT step 79.3: FAIL'), proving the targets further require that the updated G array be carried between the three Yoshida sub-calls -- a semantics stated nowhere in the prompt, background, or docstring ('G : float, The initial force of the harmonic oscillator').",
+      "suggested_fix": "Fix the 79.2 reference and regenerate 79.3 targets; document in the step prompt that nhc_Y4 must thread the returned G/V/X through the three w_j sub-steps."
+    },
+    {
+      "step_number": "79.4",
+      "defect_type": "D6",
+      "severity": "blocker",
+      "confidence": "high",
+      "evidence": "Tests 2 and 3 integrate the M=2 chain for 20000/40000 steps (2000/4000 time units). The M=2 NHC-thermostatted oscillator is chaotic: a single 1-ULP perturbation of v0 grows with measured Lyapunov exponent ~0.093 per time unit, |dx| = 4e-9 at step 2000, 2.7e-5 at step 3000, max 1.79 (full decorrelation, amplitude ~0.5) over 20000 steps; the same perturbation at M=1 stays at 4e-12 (regular dynamics, passes). My implementation -- verified BIT-EXACT against every component of all nine 79.1-79.3 targets (one element 1 ULP off) -- still differs from the 79.4 M=2 target by 1 ULP at trajectory index 1 and fails allclose from index ~2143 onward (max|dx|=1.5). A 12-variant grid (3 Verlet evaluation orders x np.exp/math.exp x v**2/v*v) all bit-diverge at index 1 and all fail. The background itself offers two algebraically-equivalent-but-differently-rounded Verlet forms ('x(t+dt) = x + v dt + F/(2m) dt^2' vs the half-step form), and the original h5 was authored under numpy 1.x whose SIMD exp kernel can differ by 1 ULP from the current one -- so the M=2 targets are pass-able only by bit-reproducing the author's exact op sequence on the author's library version. Test 1 (M=1) is fairly passable.",
+      "suggested_fix": "Replace the M=2 trajectory tests with short runs (<= 500 steps, before Lyapunov amplification exceeds rtol), or assert statistical/conserved quantities (e.g. time-averaged kinetic temperature ~ T/2 per the equipartition, or the NHC conserved energy) instead of the raw 20000-step trajectory."
+    },
+    {
+      "step_number": "79.4",
+      "defect_type": "D7",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "Both the problem IO block and the function_header docstring state 'x : array of shape (nsteps, 1)' and 'v : array of shape (nsteps, 1)', but the h5 targets are 1-D arrays of shape (20000,)/(40000,). cmp_tuple_or_list compares with np.allclose, which BROADCASTS (nsteps,1) against (nsteps,) to an (nsteps,nsteps) matrix: returns False for any non-constant trajectory (demonstrated), and for the 40000-step case allocates 12.8 GB float temporaries risking MemoryError. Dynamic confirmation: an implementation identical to the otherwise-best variant but returning the DOCUMENTED shape (impl_D_docshape.py) fails even the M=1 test that the flat-shaped version passes (steptest 79.4 --test 1: '0/1 tests pass').",
+      "suggested_fix": "Change the docstring and problem IO to 'array of shape (nsteps,)' (matching the frozen target), or re-store the targets with shape (nsteps,1)."
+    },
+    {
+      "step_number": "79.4",
+      "defect_type": "D4",
+      "severity": "major",
+      "confidence": "medium",
+      "evidence": "Neither the prompt, background, nor docstring states whether the returned trajectory includes the initial condition. The target encodes record-then-step: x[0]=0.0=x0, v[0]=0.89442719=v0, i.e. nsteps entries = initial state + (nsteps-1) updates. The equally common convention of recording the state AFTER each of the nsteps updates (x[0]=x(dt)=0.0887) shifts every entry by one step and fails all three tests, including the otherwise-fair M=1 test, well beyond tolerance.",
+      "suggested_fix": "Add to the docstring: 'x[0] = x0 and v[0] = v0; entry i is the state after i integration steps.'"
+    },
+    {
+      "step_number": "79.1",
+      "defect_type": "D8",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "All three test cases set x0 = 0.0, so F(t)=-m*omega^2*x0 = 0 at the initial point of every test: the force contribution to the position update is never exercised, and the tests differ only in dt and v0. Demonstrated false positive: a WRONG integrator that updates position by plain Euler (xt = x0 + v0*dt, omitting the F0/(2m)*dt^2 term required by the background's own formula) passes all three tests under official joint scoring (impl_E_wrongverlet.py: 'RESULT step 79.1: PASS'). The x0=0 degeneracy also makes the two algebraically different Verlet forms given in the background indistinguishable here, leaving the rounding order unpinned for the chaos-sensitive step 79.4.",
+      "suggested_fix": "Add at least one test case with x0 != 0 (e.g. x0=1.0, v0=0.5, dt=0.1) so the position update's force term is constrained."
+    },
+    {
+      "step_number": "79.2",
+      "defect_type": "D10",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "The nhc_step docstring (copied verbatim into 79.3's nhc_Y4) declares 'G : float', 'V : float', 'X : float' while every test passes np.zeros(M) arrays of length M; and it mislabels the thermostat variables: 'G : The initial force of the harmonic oscillator', 'V : The initial velocity of the particles', 'X : The initial position of the particles' -- in fact G holds the chain forces G_i, V the thermostat momenta v_{xi_i}, and X the thermostat coordinates xi_i (the function does not even receive the oscillator position). Recoverable from the Liouville operator in the prompt, but actively misleading. Cosmetic: tests also define unused variables (N=20000, x0=0.0).",
+      "suggested_fix": "Docstring: 'G, V, X : 1-D float arrays of shape (M,), the chain forces G_i, thermostat velocities v_xi_i, and thermostat positions xi_i'; drop the unused N/x0 lines from the test cases."
+    }
+  ],
+  "overall_assessment": "Problem 79 is not fair to score as-is: 3 of 4 steps cannot be passed by a spec-compliant solver. The 79.2 reference implementation deviates from its own documented pseudocode (first-sweep v_xi kicks for the outer chain elements use the stale passed-in G instead of freshly computed G_M), and that bug is baked into the M=2 targets of 79.2, 79.3 and 79.4. Independently, 79.4's M=2 tests compare 20000/40000-step chaotic trajectories (Lyapunov ~0.09/t.u.) against frozen targets at default allclose tolerance, so passing requires bit-identical floating-point evaluation order -- an implementation bit-exact on every earlier target still fails -- and its documented (nsteps,1) return shape contradicts the (nsteps,) target. Only 79.1 is cleanly passable, and even it accepts a wrong (Euler-position) integrator because all its tests use x0=0."
+}

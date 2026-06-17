@@ -1,0 +1,69 @@
+{
+  "problem_id": "33",
+  "split": "test",
+  "reviewer_model": "fable",
+  "steps_reviewed": 3,
+  "steps": [
+    {
+      "step_number": "33.1",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Hamiltonian fully specified (all d_i formulas explicit in background); header matches all calls; expert impl bit-matches targets; PASS joint."
+    },
+    {
+      "step_number": "33.2",
+      "static_ok": false,
+      "dynamic_status": "pass",
+      "notes": "Naive reading (lower band, arange(0,kmax,delta) grid, open/non-periodic plaquettes) bit-matches targets and passes; but every other reasonable discretization (periodic Fukui per the cited paper, endpoint-inclusive grid, int-truncated point count) misses by 1e-2..7e-2 vs ~1e-5 tolerance."
+    },
+    {
+      "step_number": "33.3",
+      "static_ok": false,
+      "dynamic_status": "pass",
+      "notes": "PASS with rows=m_ratio, cols=phi orientation (axis assignment unstated; transpose fails 1560/1600 entries). Tests 1 and 2 have identical targets (t1/t2=5 in both; Hamiltonian scale invariance)."
+    }
+  ],
+  "findings": [
+    {
+      "step_number": "33.2",
+      "defect_type": "D4",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "The BZ discretization convention is unstated and the frozen targets are dominated by discretization residue, so only ONE of several competent constructions passes. Background says only: 'discretize the two-dimensional Brillouin zone into grids with step delta_kx = delta_ky = delta ... the summation is over all the lattice points l ... BZ can be chosen as a rectangle with 0 <= kx <= kx0 = 2*sqrt(3)*pi/(3a), 0 <= ky <= ky0 = 4*pi/(3a)'. kx0/delta is NOT an integer in any test (e.g. test 0: kx0/delta = 115.47), so the grid cannot tile the BZ and the result is not exactly integer. Targets: 1.0077587, -1.0236071, 0.0033591 (deviation from integer = the author's specific boundary residue). Measured variants vs np.allclose tol (= 1e-8 + 1e-5*|target|, i.e. ~1e-5 for tests 0-1 and 4.4e-8 for test 2): (a) kx in np.arange(0, kx0, delta) with one extra +delta neighbor row, non-periodic links [author's choice] -> bit-match, diff ~1e-15, PASS all 3; (b) commensurate periodic mesh with wrapped links -- the actual prescription of the cited Fukui-Hatsugai-Suzuki 2005 paper, whose central feature is that it yields EXACTLY integer Chern numbers -> returns exactly 1.0 / -1.0 / 0.0, diff 7.8e-3 / 2.4e-2 / 3.4e-3, FAIL all 3; (c) grid including the endpoint region, np.arange(0, kx0+delta, delta) -> diff 1.3e-2 / 6.9e-2 / 1.1e-2, FAIL all 3; (d) point count via int truncation, delta*np.arange(int(kx0/delta)) (one fewer column than arange(0,kx0,delta), an equally common idiom) -> diff 1.3e-2 / 7.2e-2 / 1.1e-2, FAIL all 3. Aggravating (D6 flavor): test 2's target 0.0033591 is pure discretization noise around the true value C=0, and because np.allclose rtol scales with |target|, the effective tolerance there is 4.4e-8 -- the solver must reproduce the author's noise, not the physics. The docstring hint 'a real number that should be close to an integer' only weakly steers away from the exactly-integer periodic method (b). This convention also propagates to 33.3, whose targets encode the same choice.",
+      "suggested_fix": "Either (preferred) make the test robust to the discretization residue: assert np.allclose(round(c), target_integer) or use atol=0.05 against the integer value; or pin the convention in the prompt/docstring: 'grid points k = (i*delta, j*delta) for all i,j with i*delta < kx0, j*delta < ky0 (np.arange(0, kmax, delta)); evaluate the +delta neighbors directly from H(k) beyond the boundary; do NOT wrap links periodically'."
+    },
+    {
+      "step_number": "33.2",
+      "defect_type": "D4",
+      "severity": "minor",
+      "confidence": "medium",
+      "evidence": "Which band's Chern number is never stated. Background: '|n(k_l)> is the eigenvector of Hamiltonian at k_l' and 'the Chern number of a band can be calculated as...' -- no band index. The target encodes the LOWER (occupied) band: lower band gives +1.0077587 for test 0 (phi=+1), upper band gives the exact negative -1.0077587 -> FAIL (measured). Mitigation: lower/occupied band is the standard convention for the Haldane phase diagram, and the lazy-code default (eigh eigenvector column 0) is also the lower band, so most competent solvers land on the passing choice.",
+      "suggested_fix": "Add 'of the lower (occupied) band' to the step prompt and docstring."
+    },
+    {
+      "step_number": "33.3",
+      "defect_type": "D4",
+      "severity": "major",
+      "confidence": "medium",
+      "evidence": "The axis assignment of the (N,N) results matrix is unstated. Docstring says only 'results: matrix of shape(N, N): The Chern numbers by sweeping the on-site energy to next-nearest-neighbor coupling constant ratio (m/t2) and phase (phi)' -- no statement of which index is m and which is phi. Target encodes results[i,j] = C(m_i, phi_j) (rows = m/t2). Measured: canonical orientation max|diff| = 8e-14 vs target, PASS; transposed orientation fails 1560/1600 entries (max|diff| = 2.04). The phase diagram is not transpose-symmetric, so a solver who puts phi on the first axis (e.g. via meshgrid default 'xy' indexing) fails the whole step despite a correct Chern computation. Mild mitigation: the prompt and output list m before phi, so 'first listed = first axis' inference favors the passing choice. Consistent with batch-1 precedent (10.2 row-ordering graded major).",
+      "suggested_fix": "State in the docstring: 'results[i, j] is the Chern number for m/t2 = m_values[i] and phi = phi_values[j]'."
+    },
+    {
+      "step_number": "33.3",
+      "defect_type": "D8",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "Tests 1 (t1=5.0, t2=1.0) and 2 (t1=1.0, t2=0.2) have effectively identical frozen targets (max elementwise diff 7.1e-15, same m_values/phi_values). Cause: both have t1/t2 = 5 and the sweep is over m/t2, so the two Hamiltonians differ only by a global scale factor (H2 = H1/5), which leaves eigenvectors and hence Chern numbers invariant. Test 2 therefore adds no constraint on any scale-invariant implementation; absolute values of t1, t2 are decoy parameters. (It does still catch one wrong reading -- passing the raw ratio as m instead of m = ratio*t2 -- because such an implementation breaks scale invariance and produces different matrices for tests 1 and 2.)",
+      "suggested_fix": "Change test 2 to a genuinely different t1/t2 ratio (e.g. t1=1.0, t2=0.3) and regenerate the target."
+    },
+    {
+      "step_number": "33.3",
+      "defect_type": "D10",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "Header docstring summary line: 'returns the results along with the corresponding swept next-nearest-neighbor coupling constant and phase' -- mis-describes m_values, which is the swept ON-SITE-ENERGY-to-NNN-coupling RATIO (linspace(-6, 6, N) per the target), not the NNN coupling constant t2 (a fixed scalar input). The detailed per-output description below it and problem_io are correct, so this is unlikely to flip scores.",
+      "suggested_fix": "Reword the summary line to '...the corresponding swept on-site-energy-to-NNN-coupling ratios and phase values'."
+    }
+  ],
+  "overall_assessment": "All three steps are solvable and the most naive literal implementation passes every test bit-exactly (verified end-to-end in joint mode). However, the problem is fair only for solvers who happen to land on the author's unstated discretization: the frozen 33.2/33.3 targets include O(1e-2) boundary residue from a non-commensurate, non-periodic grid, judged at ~1e-5 relative tolerance, so a faithful implementation of the cited Fukui-Hatsugai-Suzuki method (periodic links, exactly-integer output) and other common grid idioms (endpoint inclusion, int-truncated point count) all fail. Recommend round-to-integer scoring or an explicit grid convention; the 33.3 axis-orientation should also be pinned."
+}

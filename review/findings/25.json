@@ -1,0 +1,23 @@
+{
+  "problem_id": "25",
+  "split": "test",
+  "reviewer_model": "fable",
+  "steps_reviewed": 3,
+  "steps": [
+    {"step_number": "25.1", "static_ok": true, "dynamic_status": "pass",
+     "notes": "g_i = b_i(sum_b c_ib w_b R_b - m_i). Hand-checked + steptest PASS all 3 tests. spc arg unused (not in formula) and undocumented in docstring Inputs, but harmless."},
+    {"step_number": "25.2", "static_ok": true, "dynamic_status": "pass",
+     "notes": "f_a = R_a(r_a(1-R_a/K_a) - sum_j c_ja N_j). Formula given verbatim in background. steptest PASS all 3 tests."},
+    {"step_number": "25.3", "static_ok": true, "dynamic_status": "pass",
+     "notes": "Integrate ODEs t=0..tf, survivors = species with abundance > SPC_THRES at tf. steptest PASS with solve_ivp RK45. Robust across RK45/LSODA/Radau/DOP853/BDF and forward-Euler at the given dt=0.01."}
+  ],
+  "findings": [
+    {"step_number": "25.3", "defect_type": "D4", "severity": "minor", "confidence": "low",
+     "evidence": "Prompt asks to 'determine which species would survive in the end' with SPC_THRES described as 'species dieout cutoff'. The h5 target for test 3 is [1,2,3,4]. But species 2 and 3 are monotonically dying out: their abundance decays 6.1e-5 -> 1.9e-5 -> 8.3e-6 -> 6.5e-6 -> 5.1e-6 over t=100..200 (species 3: 3.1e-4 -> ... -> 4.1e-6), i.e. clearly heading to extinction, merely still above the 1e-6 cutoff at the exact snapshot t=tf=200. The target therefore encodes 'abundance > SPC_THRES at t=tf' rather than true asymptotic persistence. A solver reading 'survive in the end' as long-term coexistence would exclude species 2,3 and return [1,4], failing test 3. The intended operational definition (instantaneous abundance > dieout cutoff at final time) is the more literal reading given SPC_THRES, and is what every natural numerical implementation produces, so this is a wording wrinkle, not a scoring blocker.",
+     "suggested_fix": "Clarify in the prompt that 'survivor' = species whose abundance is strictly above SPC_THRES at the final time t=tf (snapshot criterion), not asymptotic persistence."},
+    {"step_number": "25.3", "defect_type": "D6", "severity": "minor", "confidence": "low",
+     "evidence": "In test 3 the boundary species 2 and 3 land at ~5.1e-6 and ~4.1e-6, only ~4-5x above SPC_THRES=1e-6, while declining. All standard adaptive solvers (RK45 default 5.14e-6, LSODA 4.79e-6, Radau 4.79e-6, DOP853 4.80e-6, BDF 5.08e-6) and forward-Euler at the given dt=0.01 (4.07e-6) classify them as survivors -> [1,2,3,4] matches. Only an over-coarse Euler step (dt=0.05, NOT the dt the test supplies) drops species 2 to 5.8e-7 and flips the answer to [1,3,4]. So with any reasonable integrator + the supplied dt the classification is stable; flagged only because the margin is thin and a marginal species sits within a small factor of the cutoff.",
+     "suggested_fix": "None required for scoring. Optionally pick test parameters whose final-time survivor abundances are not within ~one order of magnitude of SPC_THRES, to remove integrator-sensitivity at the classification boundary."}
+  ],
+  "overall_assessment": "Problem 25 is fundamentally sound and fair to score as-is. Dependencies (numpy, scipy.integrate.solve_ivp, functools.partial) import cleanly on the current environment (no D12). Steps 25.1 and 25.2 give the growth/resource formulas explicitly and pass exactly (hand-verified and via steptest). Step 25.3 (ODE integration + survivor classification) passes with a natural solve_ivp implementation and is robust across all standard adaptive solvers and forward-Euler at the supplied dt=0.01; the three tests differ enough that trivial 'return all species' implementations fail. The only nuances are in test 3 of 25.3: the survivor criterion is a snapshot ('abundance > SPC_THRES at t=tf') that counts two clearly-extinguishing transient species as survivors, and those boundary species sit only ~4-5x above the cutoff. Neither flips under any reasonable integration choice, so both are low-severity wording/fragility notes rather than scoring defects."
+}

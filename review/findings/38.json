@@ -1,0 +1,45 @@
+{
+  "problem_id": "38",
+  "split": "dev",
+  "reviewer_model": "fable",
+  "steps_reviewed": 3,
+  "steps": [
+    {
+      "step_number": "38.1",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Plain 3D cross product; header matches calls; gold passes 3/3; targets verified by hand ([3,4,5]x[4,3,2]=[-7,14,-7]); all three targets distinct and non-degenerate."
+    },
+    {
+      "step_number": "38.2",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Reciprocal vectors for 3 input vectors; 2*pi factor and b1/b2/b3 ordering pinned explicitly in background formulas; gold passes 3/3; targets (3,3) float64, distinct, O(1) magnitude."
+    },
+    {
+      "step_number": "38.3",
+      "static_ok": false,
+      "dynamic_status": "pass",
+      "notes": "Gold (def reciprocal(*arg)) passes 4/4, and an independent competent impl passes; but the PUBLISHED header 'def reciprocal():' has zero params (D1) and the 1D background formula is written only for an x-aligned vector while test 4 feeds a1=[1,1,5] (D4)."
+    }
+  ],
+  "findings": [
+    {
+      "step_number": "38.3",
+      "defect_type": "D1",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "function_header is literally \"def reciprocal():\" -- zero parameters -- while its own docstring says \"*arg (numpy array(s)): some vectors, with the amount uncertain within the range of [1, 2, 3]\" and all four test_cases call it with 1-3 positional arguments, e.g. \"rec = reciprocal(a1,a2,a3)\" and \"assert np.allclose(reciprocal(a1), target)\". Dynamic proof: an implementation keeping the provided signature verbatim (review/work/38/step_38.3_literal_header.py) fails officially with \"TypeError: reciprocal() takes 0 positional arguments but 3 were given\"; the same logic under \"def reciprocal(*args):\" (review/work/38/step_38.3_mine.py) passes 4/4 in joint mode. The gold code itself uses \"def reciprocal(*arg):\", contradicting the published header. Same empty-header pattern as confirmed defects 11.1/11.3/19.1.",
+      "suggested_fix": "Change function_header to \"def reciprocal(*args):\" so the signature matches both the docstring and the test calls."
+    },
+    {
+      "step_number": "38.3",
+      "defect_type": "D4",
+      "severity": "major",
+      "confidence": "medium",
+      "evidence": "The step background gives the 1D rule ONLY for an x-aligned special case: \"$\\overrightarrow{a_1}=a \\vec{x}$, $\\overrightarrow{b_1}=\\frac{2 \\pi}{a_1} \\vec{x}$\" (note it also sloppily divides by the vector symbol a_1). But test 4 feeds a1 = np.array([1,1,5]), which is NOT along x. The frozen target [0.23271057, 0.23271057, 1.16355283] equals 2*pi*a1/|a1|^2, i.e. the reciprocal vector PARALLEL TO a1 with b.a1 = 2*pi -- the standard physics generalization, but one the solver must supply themselves while overriding the literally-stated formula. Dynamic proof: implementing the background verbatim, b1 = (2*pi/|a1|) * x_hat (review/work/38/step_38.3_1d_xhat.py), fails test 4 (AssertionError) while passing tests 1-3; the parallel-to-a1 generalization passes 4/4. A solver who follows the only formula given for the 1D case is scored wrong; passing requires recognizing the formula as a special case and generalizing from domain knowledge (the test cases that would disambiguate are not shown to the solver).",
+      "suggested_fix": "Rewrite the 1D background to the general form: \"For one input vector a1, the reciprocal vector is b1 = 2*pi * a1 / |a1|^2 (parallel to a1, satisfying b1 . a1 = 2*pi)\". Alternatively change test 4's input to an x-aligned vector, but fixing the background is the better repair."
+    }
+  ],
+  "overall_assessment": "Steps 38.1 and 38.2 are clean: fully specified (2*pi convention and vector ordering explicit), gold passes, targets verified independently. Step 38.3 carries two defects in the published contract: the header 'def reciprocal():' takes no arguments while every test passes 1-3 positional args (a verbatim implementation TypeErrors on all tests), and the 1D background formula is written only for an x-aligned vector while the 1D test input [1,1,5] is not, so a literal implementation of the stated formula fails. Both are repairable with one-line edits; a domain-competent solver who reads the docstring's '*arg' note and knows the standard 1D reciprocal-lattice definition does pass (verified dynamically), so the problem is borderline-fair but penalizes literal instruction-followers."
+}

@@ -1,0 +1,38 @@
+{
+  "problem_id": "7",
+  "verifier_model": "fable",
+  "n_confirmed": 3,
+  "n_refuted": 0,
+  "n_uncertain": 0,
+  "verdicts": [
+    {
+      "step_number": "7.1",
+      "defect_type": "D8",
+      "verdict": "confirmed",
+      "tier": "B",
+      "revised_severity": null,
+      "fix_kind": "test_edit",
+      "one_liner": "Re-ran reviewer's no-FFT stub (correct mask T, zeros filtered_image) in official concatenated style: exit 0, full credit; periodicity argument (input periods 2/4 -> spectral peaks at radii 0/200/447.2/565.7, all outside bands 20-100) checks out by inspection."
+    },
+    {
+      "step_number": "7.1",
+      "defect_type": "D9",
+      "verdict": "confirmed",
+      "tier": "A",
+      "revised_severity": null,
+      "fix_kind": "test_edit",
+      "one_liner": "Test 4 verbatim calls apply_band_pass_filter(image_array,...) for T1 before any image_array assignment in that test (and has stray 'frequency_threshold = 100'); only works via namespace leakage from test 3, demonstrated by the concatenated-script run passing."
+    },
+    {
+      "step_number": "7.1",
+      "defect_type": "D10",
+      "verdict": "confirmed",
+      "tier": "A",
+      "revised_severity": null,
+      "fix_kind": "doc_edit",
+      "one_liner": "Background verbatim says 'Ouput the nxn array' for an [m,n] input and 'the frequency threshold' (singular) vs two bandmin/bandmax params in header; cosmetic, minor severity appropriate."
+    }
+  ],
+  "missed_defects": [],
+  "summary": "All 3 findings confirmed (D8 zero-target degeneracy verified by re-running the reviewer's no-FFT stub which passes the official-style script; D9 non-self-contained test 4 and D10 doc inconsistency verified by reading). Severities are appropriate; the problem is fixable to fair via the suggested test edits."
+}

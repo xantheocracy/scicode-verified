@@ -1,0 +1,33 @@
+{
+  "problem_id": "62",
+  "verifier_model": "fable",
+  "n_confirmed": 3, "n_refuted": 0, "n_uncertain": 1,
+  "verdicts": [
+    {"step_number": "62.5", "defect_type": "D5",
+     "verdict": "confirmed",
+     "tier": "C",
+     "revised_severity": null,
+     "fix_kind": "test_edit",
+     "one_liner": "Reproduced via reviewer's scratch: rho eigvals [0.9330127, 0.0223291 x3] degenerate to 1.2e-16; energy/H match target exactly while conn_Sz maxdiff=0.1755 and conn_Sp=1.393 despite identical SVDs ([0.5 x4], [1,1,0,0]) — target is one arbitrary gauge representative. Secondary claim also confirmed: target dict stored as ndarray and are_dicts_close calls value2.toarray() in the sparse branch, so sparse-returning solvers crash."},
+    {"step_number": "62.1", "defect_type": "D1",
+     "verdict": "confirmed",
+     "tier": "A",
+     "revised_severity": null,
+     "fix_kind": "header_edit",
+     "one_liner": "Header quote accurate: single 'class EnlargedBlock:' with __init__/print_all duplicated twice, 'class Block:' line missing, while prompt says 'Create two classes, Block and EnlargedBlock'. Minor is right (step unscored, intent unmistakable)."},
+    {"step_number": "62.6", "defect_type": "D8",
+     "verdict": "confirmed",
+     "tier": "A",
+     "revised_severity": null,
+     "fix_kind": "test_edit",
+     "one_liner": "test_cases[2] and [5] are character-identical 'run_dmrg(block, 100,100, model_d)' and h5 targets are bitwise equal (-44.12773975752229 == -44.12773975752229 True)."},
+    {"step_number": "62.6", "defect_type": "D6",
+     "verdict": "uncertain",
+     "tier": "B",
+     "revised_severity": null,
+     "fix_kind": "tolerance_change",
+     "one_liner": "Single isolated flaky failure of test 3 cannot be cheaply confirmed or refuted (each L=100,m=100 run ~5 min and one rerun wouldn't settle flakiness); reviewer self-flagged low confidence. Multiple isolated reruns on an idle machine would settle it; suggested tolerance loosening is harmless either way."}
+  ],
+  "missed_defects": [],
+  "summary": "3 confirmed, 0 refuted, 1 uncertain. The 62.5 blocker is solid (degenerate-eigenspace gauge ambiguity fully reproduced from the first pass's scratch, including the sparse/toarray crash path); problem is fixable to fair by re-scoring 62.5 on gauge-invariant quantities and dropping the duplicate 62.6 test."
+}

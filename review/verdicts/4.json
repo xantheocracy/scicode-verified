@@ -1,0 +1,29 @@
+{
+  "problem_id": "4",
+  "verifier_model": "fable",
+  "n_confirmed": 2,
+  "n_refuted": 0,
+  "n_uncertain": 0,
+  "verdicts": [
+    {
+      "step_number": "4.1",
+      "defect_type": "D8",
+      "verdict": "confirmed",
+      "tier": "B",
+      "revised_severity": null,
+      "fix_kind": "test_edit",
+      "one_liner": "Re-ran probe: `return np.linalg.cholesky(A)` passes 3/3 via official steptest; all three test matrices are structurally fill-in-free (tridiagonal x2; +/-2-banded decouples into two tridiagonal chains), so the incomplete aspect is never exercised. Major stands."
+    },
+    {
+      "step_number": "4.1",
+      "defect_type": "D4",
+      "verdict": "confirmed",
+      "tier": "A",
+      "revised_severity": null,
+      "fix_kind": "doc_edit",
+      "one_liner": "Quote accurate: problem_io/header output is just 'A : Matrix, 2d array M * M'; gold zeroes the strict upper triangle so targets have zero uppers, while a verbatim in-place pseudocode translation leaves nonzero stale uppers and fails allclose. Minor is fair (background says 'lower triangular matrix K')."
+    }
+  ],
+  "missed_defects": [],
+  "summary": "Both findings confirmed at stated severities: the D8 false-positive (full Cholesky scores 3/3 because no test matrix has fill-in) re-reproduced via one steptest run, and the D4 output-spec ambiguity verified by reading. Problem is fixable to fair by adding one fill-in-producing SPD test matrix plus a docstring clarification."
+}

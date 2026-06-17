@@ -1,0 +1,207 @@
+{
+  "problem_id": "80",
+  "split": "test",
+  "verifier_model": "fable",
+  "verdicts": [
+    {
+      "step_number": "80.3",
+      "defect_type": "D7",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "Ran my own all-pairs min-image truncated-shifted LJ E_pot (review/work/80/verify/v_correct.py): steptest 80.3 FAIL (official joint). My chain reconstruction summing only consecutive rows (v_chain.py): PASS. Bit-match script (attack_alternatives.py): test-2 h5 target -0.0010667416018009025 == chain sum BIT-EXACT; correct all-pairs = -0.3028987021072442; also tried no-min-image (-0.01578), double-counted (-0.6058), ring closure (same as chain here), per-particle nearest-neighbor (-0.5799) -- only the consecutive-row chain matches. Tests 0/1 cannot discriminate (N=2; all pairs at r>=rc -> 0.0). Attack on the 'chain is intended' reading fails: docstring says 'total potential energy of a system' and the configuration is a random 3D fluid, for which consecutive-ARRAY-index energy is physically meaningless.",
+      "fix": {
+        "kind": "target_regen",
+        "target_location": "h5 group '80.3' test 2 (and reword sub_steps[2].step_background)",
+        "before": "h5 target test2 = -0.0010667416018009025 (consecutive-row chain sum); background: 'The local energy refers to the energy between the two atoms next to each other.'",
+        "after": "h5 target test2 = -0.30289870210724418 (all-pairs i<j, min-image, truncated-shifted LJ); background: 'The total energy is the sum of the pair energies E_ij over all distinct pairs of atoms, evaluated at the minimum-image distance.'",
+        "regen_recipe": "review/work/80/verify/v_correct.py::E_pot on the test-2 positions with L=10, sigma=1, epsilon=1, rc=5 -> -0.30289870210724418 (targets for tests 0 and 1 are unchanged: chain == all-pairs for N=2, and test 1 is 0.0 under both).",
+        "side_effects": "None on other steps' h5 targets (80.7 only asserts band statistics). Tests 0/1 targets identical under old and new reference."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "80.4",
+      "defect_type": "D4",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "My f_ij with the standard reading r = r_i - r_j, F_i = -dV/dr*rhat (v_correct.py): steptest 80.4 FAIL. Same code with the opposite sign +dV/dr*rhat (v_chain.py): PASS. attack_alternatives.py shows targets for tests 1-2 equal +dV/dr*rhat exactly and the standard reading gives exactly -target; test 0 is zero under both (|r|>rc). Verbatim docstring contradiction confirmed: 'r (float): The distance between particles i and j' while tests pass a 3-vector, and prompt only says 'whose three dimensional displacement is r' with no direction. Nothing in prompt/background/tests disambiguates the direction; the background F = -dV/d(r-vec) is consistent with BOTH readings depending on which way r points. Genuine 50/50 guess -> major D4.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[3].function_header docstring",
+        "before": "r (float): The distance between particles i and j.",
+        "after": "r (array_like): The 3D displacement vector pointing from particle i to particle j (r_j - r_i), in nanometers.",
+        "regen_recipe": null,
+        "side_effects": "None: under this documented direction the existing h5 targets (+dV/dr*rhat) are the physically correct force on i, so no target regen. Also delete the stray 'and, optionally, the Yukawa potential' clause in the same docstring (see 80.2 D10 verdict)."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "80.5",
+      "defect_type": "D7",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "h5 targets inspected directly: every nonzero row has identical x=y=z components (test1 row0 = [6.6107e-4]*3; all test2 rows isotropic) -- impossible for genuine pair forces, which lie along displacements. My correct all-pairs vector forces (v_correct.py): steptest 80.5 FAIL (crashes test 1: 'operands could not be broadcast together with shapes (3,3) (2,3)'). Chain scalar-broadcast reconstruction (v_chain.py: loop (i,i+1), signed scalar +dV/dr at min-image distance broadcast over x,y,z, allocated shape (N,3)): PASS, test-0 target BIT-EXACT, tests 1-2 allclose. All-pairs scalar broadcast tried as alternative: FAILS tests 1-2. No physically defensible reading reproduces the targets.",
+      "fix": {
+        "kind": "target_regen",
+        "target_location": "h5 group '80.5' all 3 tests (after fixing test 1 input, see D4 verdict below)",
+        "before": "Isotropic chain scalar-broadcast targets, e.g. test1 = [[6.6107e-4]*3, [-6.6107e-4]*3]",
+        "after": "All-pairs min-image vector forces: f_xyz[i] += f_ij(r_i - r_j -> -dV/dr*rhat), f_xyz[j] -= same (or equivalently the i->j convention matching the fixed 80.4 doc)",
+        "regen_recipe": "review/work/80/verify/v_correct.py::forces on each test's inputs (regenerate after the test-1 N/rows fix).",
+        "side_effects": "80.6 targets MUST be regenerated simultaneously (velocity_verlet consumes forces); 80.7 unaffected (band statistics only)."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "80.5",
+      "defect_type": "D4",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "Test 1 verbatim: 'N = 2 ... positions = np.array([[...],[...],[...]])' -- three rows; h5 target shape (2,3) verified by direct load. My implementation iterating over len(xyz) produced shape (3,3) and the official joint run died with 'ValueError: operands could not be broadcast together with shapes (3,3) (2,3)' (run log above). Docstring contract says 'xyz: A NumPy array with shape (N, 3)', so the test input violates the step's own contract; only implementations that allocate (N,3) and silently ignore row 3 can pass. Independent of the D7 chain bug.",
+      "fix": {
+        "kind": "test_edit",
+        "target_location": "sub_steps[4].test_cases[1]",
+        "before": "N = 2 with a 3-row positions array",
+        "after": "N = 3 (keep all three positions), then regenerate the test-1 target with the corrected all-pairs reference (combined with the D7 regen above)",
+        "regen_recipe": "v_correct.py::forces(3, positions, 10, 1, 1, 7)",
+        "side_effects": "Folded into the 80.5 target regen; no other step reads this test."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "80.6",
+      "defect_type": "D7",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "Textbook velocity Verlet on top of correct all-pairs vector forces (v_correct.py): steptest 80.6 FAIL on all tests. Identical Verlet code on top of the chain scalar-broadcast forces (v_chain.py): PASS. Direct target check: test-0 velocity increments are isotropic ([1.2202e-4]*3 and its negation) while the inter-particle displacement is [0.0447, 2.925, -0.388] -- a real LJ force along the displacement cannot produce isotropic dv. Defect is purely inherited from the broken 80.5 reference forces.",
+      "fix": {
+        "kind": "target_regen",
+        "target_location": "h5 group '80.6' all 3 tests",
+        "before": "Targets generated with chain scalar-broadcast forces (isotropic velocity deltas)",
+        "after": "Targets from textbook velocity Verlet using correct all-pairs min-image vector forces",
+        "regen_recipe": "review/work/80/verify/v_correct.py::velocity_verlet on each test's inputs (after the 80.5 reference is fixed; use the same corrected forces()).",
+        "side_effects": "Must be done together with the 80.5 regen so the two steps stay consistent; 80.7 unaffected."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "80.7",
+      "defect_type": "D4",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "initialize_fcc(200) builds ceil(200^(1/3))^3 = 6^3 = 216 positions (verified). Ran two identical correct vectorized Anderson-NVT implementations through official steptest: normalizing instantaneous T by len(arrays)=216 -> PASS (run_md_correct.log); normalizing by the documented N=200 -> FAIL with AssertionError (run_md_N.log), exactly the predicted 216/200 = 1.08 bias vs the 1.05 band. Docstring contract 'N: The number of particles... init_positions: shape (N,3)' is violated by the tests themselves. Pass/fail hinges on disbelieving the documented N.",
+      "fix": {
+        "kind": "test_edit",
+        "target_location": "sub_steps[6].test_cases[0..2], the line 'N = 200'",
+        "before": "N = 200",
+        "after": "N = 216",
+        "regen_recipe": null,
+        "side_effects": "None: h5 targets are the booleans (True, True) from band checks, which a correct implementation still satisfies with consistent N=216 (verified: my len-based run, equivalent to N=216, passed all three tests). No h5 regen needed."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "80.7",
+      "defect_type": "D8",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "Wrote my own no-simulation stub (v_stub7.py: instant_T_array=np.full(num_steps,T), intercollision_times=np.full(1000,1/nu), zeros/echoed inputs otherwise): official steptest 80.7 PASS. Also built an Anderson-MD using the completely wrong chain scalar-broadcast forces (v_md_chain7.py): PASS. The only assertions are the two 5% band statistics with frozen targets (True,True) (verified by h5 load); E_total_array, positions, velocities are returned but never checked. Borders blocker under the strict 'any wrong one passes' definition, but kept major: the false-positive only rewards thermostat bookkeeping, which the step is nominally about.",
+      "fix": {
+        "kind": "test_edit",
+        "target_location": "sub_steps[6].test_cases[0..2]",
+        "before": "assert (s1, v1) == target  (band checks only, target=(True,True))",
+        "after": "Seed the RNG at the top of each test (np.random.seed(k)) and additionally assert a deterministic physical quantity, e.g. np.allclose(E_total_array, target_E) against a frozen array regenerated from the corrected reference, or at minimum assert energy conservation between collision events.",
+        "regen_recipe": "Requires regenerating new frozen arrays from the corrected reference (run v_correct.py::MD_NVT with the chosen seeds).",
+        "side_effects": "Any added deterministic assert pins the solver's exact RNG consumption pattern (draw order) -- document the required sampling scheme in the prompt if added, or keep band checks plus an energy-conservation check to stay implementation-agnostic."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "80.7",
+      "defect_type": "D10",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "Static, quoted verbatim from sub_steps[6].function_header: 'Integrate the equations of motion using the velocity Verlet algorithm, with the inclusion of the Berendsen thermostat and barostat for temperature and pressure control' and 'Returns: tuple  Updated positions and velocities of all particles, and the possibly modified box length after barostat adjustment.' -- while the prompt/background specify the Anderson thermostat (NVT, no barostat) and the return line is 'return(E_total_array, instant_T_array,positions,velocities,intercollision_times)'. None of the three array returns is documented anywhere; intercollision_times semantics (pooled per-particle waiting times) is only inferable from the background's P(t;nu)=nu*exp(-nu*t).",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[6].function_header docstring",
+        "before": "'...with the inclusion of the Berendsen thermostat and barostat...' / 'Returns: tuple Updated positions and velocities of all particles, and the possibly modified box length after barostat adjustment.'",
+        "after": "'Run NVT molecular dynamics with the velocity Verlet integrator and the Anderson thermostat (each particle suffers a stochastic collision with probability nu*dt per step; on collision its velocity is resampled from the Maxwell-Boltzmann distribution at temperature T).' / 'Returns: tuple (E_total_array: total energy per step; instant_T_array: instantaneous temperature per step; positions, velocities: final (N,3) arrays; intercollision_times: array of waiting times between successive collisions of the same particle, pooled over all particles).'",
+        "regen_recipe": null,
+        "side_effects": "None; pure documentation fix, makes the existing (True,True) targets derivable."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "80.7",
+      "defect_type": "D5",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Static: grep over all three 80.7 test_cases finds no 'seed' (verified programmatically); the Anderson thermostat necessarily consumes unseeded np.random draws, so the official verdict is not bit-reproducible. Corroborating margins: my single correct run passed comfortably, and the failure of the N=200-normalized variant at exactly the predicted +8% bias implies the T statistic itself is tight to ~1% (band 5%), i.e. flake probability is small. Minor is the right calibration.",
+      "fix": {
+        "kind": "test_edit",
+        "target_location": "sub_steps[6].test_cases[0..2], first line",
+        "before": "(no seeding)",
+        "after": "np.random.seed(0) / (1) / (2) as the first executable line of each test case",
+        "regen_recipe": null,
+        "side_effects": "None with the current band-style asserts (booleans stay (True,True)); makes scoring reproducible."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "80.7",
+      "defect_type": "D6",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "medium",
+      "reproduction": "Measured myself on this machine: one naive loop-based forces() call on the 216-particle fcc config = 0.123 s; one loop-based E_pot() = 0.094 s. A straightforward correct solver reusing the loop-based step-5/step-6 building blocks (2 force calls + 1 E_pot per step, 2000 steps, 3 tests) extrapolates to ~2044 s, over the official 1800 s limit; the force-reusing variant (~1300 s) squeaks under but is machine-dependent. Only an independently vectorized O(N^2) implementation runs comfortably (~tens of seconds, as my passing runs show). The buggy O(N) chain reference never faced this. Confidence medium because the threshold crossing depends on hardware and solver structure.",
+      "fix": {
+        "kind": "test_edit",
+        "target_location": "sub_steps[6].test_cases[0..2], 'num_steps = 2000'",
+        "before": "num_steps = 2000",
+        "after": "num_steps = 1000 (band statistics retain ample margin; halves runtime so a loop-based correct solution finishes within the limit)",
+        "regen_recipe": null,
+        "side_effects": "Band-check booleans remain (True,True) (statistics have ~10x margin at 2000 steps, ~7x at 1000); verify once with the corrected reference before freezing."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "80.2",
+      "defect_type": "D10",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Static, quoted verbatim: 80.2 docstring 'Calculate the combined truncated and shifted Lennard-Jones potential energy and, if specified, the truncated and shifted Yukawa potential energy between two particles' and 80.4 docstring '...and, optionally, the Yukawa potential' -- programmatic check confirms 'Yukawa' appears in both function_headers while no Yukawa parameter exists anywhere in the problem. LJ-only reading passes (my v_correct.py passed 80.2), so minor is correct.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[1].function_header and sub_steps[3].function_header docstrings",
+        "before": "'...and, if specified, the truncated and shifted Yukawa potential energy...' / '...and, optionally, the Yukawa potential.' / 'The combined potential energy ... considering the specified potentials.'",
+        "after": "Delete every Yukawa clause; 'Calculate the truncated and shifted Lennard-Jones potential energy between two particles.' / 'float: The truncated and shifted Lennard-Jones potential energy between the two particles.'",
+        "regen_recipe": null,
+        "side_effects": "None; pure documentation cleanup."
+      },
+      "uncertainty_notes": null
+    }
+  ],
+  "missed_defects": [],
+  "summary": "All 11 first-pass findings independently reproduced and confirmed at their original severities (3 blockers, 5 major, 3 minor): correct physics FAILS steptest on 80.3/80.4/80.5/80.6 while a reconstructed buggy reference (consecutive-row 'chain' pairs, signed scalar +dV/dr broadcast over x,y,z) PASSES bit-exactly; 80.7's band tests pass a no-simulation stub and chain-broken dynamics yet fail a correct implementation that trusts the documented N=200 (arrays carry 216 particles). required_dependencies exec cleanly; no missed defects found. The problem is fixable to fair with moderate-to-high effort: doc edits for 80.2/80.4/80.7, trivial test edits (N=216, seeds, num_steps) for 80.7, but 80.3/80.5/80.6 need their h5 targets regenerated from a corrected all-pairs vector-force reference (regen code already in review/work/80/verify/v_correct.py), and 80.7 needs new deterministic assertions to stop scoring stubs as correct."
+}

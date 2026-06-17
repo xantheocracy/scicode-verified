@@ -1,0 +1,78 @@
+{
+  "problem_id": "61",
+  "split": "test",
+  "verifier_model": "fable",
+  "verdicts": [
+    {
+      "step_number": "61.1",
+      "defect_type": "D7",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "Wrote my own Busing-Levy Bmat (review/work/61/verify/sol_bl.py) and my own inv(A) Bmat (sol_inva.py) from scratch. steptest joint: sol_bl.py FAILS 61.1 (AssertionError on test 0), sol_inva.py PASSES. Direct h5 comparison (check_61_1.py): target == inv(A) bit-exactly (max|diff| 0.0, 0.0, 1.8e-20 on tests 0-2) where A = direct-lattice column matrix with a//x, b in xy plane; Busing-Levy misses by 7.4e-6 (tests 0,1, > rtol*|tgt|=1.9e-6) and 0.044 (test 2, gamma=120.1). Decisive attack on any defensible-convention escape: tgt.T@tgt - G* = 2.7e-6 / 0.027 (tests 0/2) while tgt@tgt.T - G* = 0, so the target violates |B@hkl|^2 = hkl^T G* hkl and is NOT a valid hkl->q transform in ANY Cartesian frame -- it is the transpose of one (rows, not columns, are the reciprocal primitive vectors, and they live in the direct-lattice-aligned frame x//a, not the stated x*//a*: target column 0 = (0.18549537,0,0) but a* = 0.18550273). Every prompt-compliant solution fails; only the row-stacked/transposed object passes.",
+      "fix": {
+        "kind": "target_regen",
+        "target_location": "h5 group '61.1' tests 0-2 in SciCode/eval/data/test_data.h5",
+        "before": "test 0 target = [[0.18549537,-0.00161879,0.00032943],[0,0.18550244,-0.00065038],[0,0,0.1854968]] (= inv(A), transposed/wrong-frame object); analogous for tests 1,2",
+        "after": "Busing-Levy B for the stated convention (x*//a*, z*//(a* x b*), a_i.b_j=delta_ij): test 0 = [[0.18550273,-0.00161995,0.00032942],[0,0.1854965,-0.0006475],[0,0,0.18549537]]; test 1 = [[0.18458374,-0.00161192,0.00032779],[0,0.18457755,-0.0006443],[0,0,0.18457642]]; test 2 = [[0.326559466,0.163773085,-1.014e-06],[0,0.282525107,-5.80985e-04],[0,0,0.1664392]]",
+        "regen_recipe": "review/work/61/verify/check_61_1.py function B_BL(pa): build direct vectors (a//x, b in xy), reciprocal vectors b_i = a_j x a_k / V, then B = [[a*, b*cos(g*), c*cos(b*)],[0, b*sin(g*), -c*sin(b*)cos(alpha)],[0,0,1/c]]; run on the three (a,b,c,alpha,beta,gamma) tuples in sub_steps[0].test_cases.",
+        "side_effects": "None on 61.3-61.5 h5 targets: all downstream tests use the cubic cell (5.39097,*,90,90,90) for which B_BL == inv(A) == (1/a)I to machine precision (verified: sol_bl_full.py passes 61.3/61.4/61.5 unchanged). Alternative (worse) fix: prompt_edit to ask for the row-stacked reciprocal-vector matrix in the x//a frame -- rejected because the current target is also physically dubious as the requested hkl->q transform."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "61.5",
+      "defect_type": "D8",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "All 61.3/61.4/61.5 test cases use (a,b,c,alpha,beta,gamma)=(5.39097,5.39097,5.39097,90,90,90) (read from sub_steps JSON), for which every B convention degenerates to (1/a)I. Verified dynamically: sol_bl_full.py (Busing-Levy Bmat, which FAILS 61.1) PASSES 61.3, 61.4, 61.5 joint; sol_rotB.py (Bmat corrupted by an arbitrary rotation R, fails 61.1 AND 61.3) still PASSES 61.5 because U = T_g T_c^T makes U@B invariant under B -> R@B. So the integrated pipeline never constrains the B convention.",
+      "fix": {
+        "kind": "test_edit",
+        "target_location": "sub_steps[4].test_cases (add one case) + new h5 target under group '61.5'",
+        "before": "All four 61.5 tests use pa = (5.39097,5.39097,5.39097,90,90,90)",
+        "after": "Add a test case with a non-orthogonal cell, e.g. pa = (3.53953,3.53953,6.0082,89.8,90.1,120.1) (already used in 61.1) with consistent H1/H2/p1/p2/z1/z2 detector geometry, and regenerate its target with the fixed (Busing-Levy) reference pipeline.",
+        "side_effects": "Requires the 61.1 convention fix to land first (the new target depends on which B is canonical); synthetic pixel positions for the triclinic cell must be generated from a forward simulation so the two orientation reflections remain self-consistent. Severity stays minor: cubic-only inputs mean currently-passing answers are numerically correct for the tested inputs -- this is a coverage gap, not a mis-scoring."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "61.3",
+      "defect_type": "D10",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Static check of review/problems/61.json: 61.3 function_header line reads verbatim 'z_s: step size in the \\phi rotation, float in the unit of degree' while the 61.3 step prompt says 'characterized by a specific rotation angle $\\theta$' and problem_io says 'z_s: step size in the \\theta rotation'. Same parameter, inconsistent symbol. Harmless in practice: my literal implementation (theta_i = z_i*z_s about -y, back-rotation R_y(+theta)) passed 61.3 joint on first attempt.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[2].function_header docstring, z_s line",
+        "before": "z_s: step size in the \\phi rotation, float in the unit of degree",
+        "after": "z_s: step size in the \\theta rotation, float in the unit of degree",
+        "side_effects": "None (doc-only)."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "61.5",
+      "defect_type": "D10",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Static check, verbatim from review/problems/61.json: step_background starts 'Background\\nEmploy step to calculate the momentum transfer $\\vec{Q}$\\n2. Utilize $\\mathbf{G}$ matrix obtained from step to rotate...' -- numbered-list references lost, and G is never defined anywhere in the problem. Docstring line: 'z_s: step size in the       heta rotation' (literal tab ate the backslash-t of \\theta) and output doc 'q: 3x1 orthogonal matrix, float' is nonsense for an (h,k,l) vector. Recoverable: the closed-form '(h,k,l) = (UB)^{-1}G^{-1}\\vec{Q}' plus 61.3's back-rotation pins G = R_{-y}(theta_z); my literal get_hkl passed all 4 tests joint.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[4].step_background and sub_steps[4].function_header docstring",
+        "before": "'Employ step to calculate the momentum transfer' / '2. Utilize $\\mathbf{G}$ matrix obtained from step' / 'z_s: step size in the \\theta rotation' (rendered with literal tab) / 'q: 3x1 orthogonal matrix, float'",
+        "after": "'1. Employ step 2 to calculate the momentum transfer $\\vec{Q}$' / '2. Utilize the goniometer matrix $\\mathbf{G} = R_{-y}(\\theta_z)$, $\\theta_z = z \\cdot z_s$, from step 3 to rotate $\\vec{Q}$ back' / 'z_s: step size in the theta rotation, float in the unit of degree' (no escape) / 'q: (h,k,l) indices, 3x1 array, float'",
+        "side_effects": "None (doc-only)."
+      },
+      "uncertainty_notes": null
+    }
+  ],
+  "missed_defects": [],
+  "summary": "All 4 first-pass findings confirmed at their original severities (4 confirmed / 0 refuted / 0 uncertain). The single blocker (61.1) is real and airtight: the h5 target is bit-exactly inv(A) -- the transpose of a valid hkl->q map, in the wrong frame -- and the prompt-specified Busing-Levy matrix fails official joint scoring on all three tests; fix is a clean target_regen with zero downstream side effects because every 61.3-61.5 test uses a cubic cell (which is itself the confirmed minor D8 coverage gap). With the 61.1 target regenerated and two doc edits, the problem is fully fair; the optional non-cubic 61.5 test is a nice-to-have."
+}

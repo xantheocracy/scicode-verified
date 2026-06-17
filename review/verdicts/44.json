@@ -1,0 +1,27 @@
+{
+  "problem_id": "44",
+  "split": "dev",
+  "verifier_model": "fable",
+  "verdicts": [
+    {
+      "step_number": "44.3",
+      "defect_type": "D7",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "Gold passes joint (steptest --use-gold: PASS). A spec-faithful entropies() that uses the documented d0 as solve_ivp's initial state (review/work/44/verify/faithful.py) FAILS joint scoring; isolate localizes test 1/3 FAIL, 2/3 PASS, 3/3 PASS. Direct comparison vs frozen 44.3/test1 target: the d0-IGNORED reproduction (hardcoded np.ones((Z,Z))*0.01) matches the target to max abs diff 4.44e-16 (bit-match), while the faithful d0=0.5 reproduction diverges by max abs diff 0.571 (entropy[1]=2.4107 faithful vs 1.8394 target). Tests 2 and 3 pass d0=0.01, coincidentally matching the hardcoded value, so they pass either way; test 1 passes d0=0.5 and exposes the bug. The prompt explicitly states the function is 'given ... the initial 2-mers concentration matrix d0' and the docstring documents 'd0: concentration of 2-mers of each type at time 0' — no defensible reading ignores it. Under official joint scoring one failing test fails the whole step, so no spec-faithful solver can score 44.3.",
+      "fix": {
+        "kind": "target_regen",
+        "target_location": "ground_truth_code of sub_steps[2] (44.3) AND h5 group '44.3/test1/var1' (the d0=0.5 case). h5 test2/test3 unchanged (their d0=0.01 already equals the corrected initial condition).",
+        "before": "    Z = len(c0)\n    d0 = np.ones((Z, Z)).flatten()*0.01\n    solution = solve_ivp(step, [0, tf], d0, args=(c0, lig), t_eval=np.linspace(0, tf, nsteps))",
+        "after": "    Z = len(c0)\n    d0 = np.asarray(d0, dtype=float).flatten()\n    solution = solve_ivp(step, [0, tf], d0, args=(c0, lig), t_eval=np.linspace(0, tf, nsteps))",
+        "regen_recipe": "With the corrected gold (using d0), run test-0 inputs c0=np.ones(4)*10.0, d0=np.ones([4,4])*0.5, lig=np.hstack([np.ones([4,2]),-np.ones([4,2])]), tf=20, nsteps=1000, and overwrite h5 '44.3/test1/var1' with the resulting entropy_list. Verified deterministic; new target0 first 8 = [2.77258872, 2.41067714, 1.50984646, 1.47166089, 1.45734853, 1.52584564, 1.60235347, 1.63331082] (vs old buggy [2.77258872, 1.83941434, 1.40202421, ...]). Code in review/work/44/verify/faithful.py reproduces it.",
+        "side_effects": "Only the 44.3/test1 target changes (test2/test3 targets are bit-identical because d0=0.01 = the corrected y0). No later step depends on 44.3 (it is the final step). general_solution and general_tests duplicate 44.3 and would be updated for consistency. Alternative (inferior) fix: change test-0's d0 from 0.5 to 0.01 to mask the mismatch — leaves the contract violation in the gold and weakens the test, not recommended."
+      },
+      "uncertainty_notes": null
+    }
+  ],
+  "missed_defects": [],
+  "summary": "1 finding audited and CONFIRMED (blocker, D7). The first pass is correct and well-calibrated: step 44.3's gold ignores the documented d0 initial-condition argument and hardcodes np.ones((Z,Z))*0.01, and the frozen target bit-matches that buggy output (max diff 4.4e-16) while a spec-faithful d0-using solver diverges by 0.571 on test 0 (d0=0.5) and fails joint scoring. Steps 44.1 and 44.2 spot-checked independently: gold passes, signatures match, complementary-index map and master-equation/r_i-l_j definitions are fully specified — both clean, no missed defects. The problem is fixable to fair with low effort: a 1-line gold fix plus regenerating the single 44.3/test1 target (tests 2/3 already match)."
+}

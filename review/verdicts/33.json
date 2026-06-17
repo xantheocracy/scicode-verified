@@ -1,0 +1,56 @@
+{
+  "problem_id": "33",
+  "verifier_model": "fable",
+  "n_confirmed": 5,
+  "n_refuted": 0,
+  "n_uncertain": 0,
+  "verdicts": [
+    {
+      "step_number": "33.2",
+      "defect_type": "D4",
+      "verdict": "confirmed",
+      "tier": "B",
+      "revised_severity": null,
+      "fix_kind": "test_edit",
+      "one_liner": "Re-ran first-pass variants.py: only the author's arange/open-boundary grid bit-matches; periodic Fukui (exactly 1.0/-1.0/0.0), endpoint-inclusive, and truncated grids all FAIL at ~1e-5 (test 2 tol 4.4e-8 on pure discretization noise); kx0/delta=115.47 non-integer as claimed."
+    },
+    {
+      "step_number": "33.2",
+      "defect_type": "D4",
+      "verdict": "confirmed",
+      "tier": "B",
+      "revised_severity": null,
+      "fix_kind": "doc_edit",
+      "one_liner": "Background never names the band; same variants run shows upper band gives exact negative (-1.0077587 etc.) and fails; minor is right since eigh column-0 default and standard convention both land on the passing lower band."
+    },
+    {
+      "step_number": "33.3",
+      "defect_type": "D4",
+      "verdict": "confirmed",
+      "tier": "B",
+      "revised_severity": null,
+      "fix_kind": "doc_edit",
+      "one_liner": "Docstring quote accurate (no axis assignment stated); target matrix is transpose-asymmetric with exactly 1560/1600 mismatching entries as claimed, so a phi-first orientation fails the whole step."
+    },
+    {
+      "step_number": "33.3",
+      "defect_type": "D8",
+      "verdict": "confirmed",
+      "tier": "B",
+      "revised_severity": null,
+      "fix_kind": "test_edit",
+      "one_liner": "Checked h5: tests 1 and 2 results differ by max 7.1e-15 with identical m/phi arrays; scale-invariance argument (t1/t2=5 in both, H2=H1/5) is correct, so test 2 is nearly redundant."
+    },
+    {
+      "step_number": "33.3",
+      "defect_type": "D10",
+      "verdict": "confirmed",
+      "tier": "A",
+      "revised_severity": null,
+      "fix_kind": "doc_edit",
+      "one_liner": "Header summary line really says 'swept next-nearest-neighbor coupling constant' while m_values is the m/t2 ratio per problem_io and the per-output description; minor since the detailed description is correct."
+    }
+  ],
+  "missed_defects": [],
+  "summary": "All 5 findings confirmed (0 refuted, 0 uncertain); the first pass's numeric claims reproduce exactly from its own scratch. Problem is fixable to fair via round-to-integer/atol scoring or an explicit grid convention for 33.2, plus pinning the 33.3 axis orientation."
+}

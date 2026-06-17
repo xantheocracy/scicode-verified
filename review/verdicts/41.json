@@ -1,0 +1,17 @@
+{
+  "problem_id": "41",
+  "verifier_model": "fable",
+  "n_confirmed": 1,
+  "n_refuted": 0,
+  "n_uncertain": 0,
+  "verdicts": [
+    {"step_number": "41.3", "defect_type": "D4",
+     "verdict": "confirmed",
+     "tier": "B",
+     "revised_severity": "major",
+     "fix_kind": "target_regen",
+     "one_liner": "Reproduced: test2 col-sums [93.46,76.31,99.0,135.16] are non-balanced (violates BG 'each column = D-1'); first-column-sum normalization gives 0.005174506 (matches target, PASS), while per-column normalization consistent with 41.2 GetResPts gives 0.004136 (FAIL). Undocumented first-column tie-break wrongly fails competent solvers."}
+  ],
+  "missed_defects": [],
+  "summary": "Single D4 finding confirmed via steptest + direct computation: the frozen test-2 target silently encodes D-1 = sum of the first column of M, an undocumented convention not derivable from the background's balanced-community premise; the geometrically consistent per-column definition fails. Problem is fixable to fair by regenerating test 2 with a balanced community (or recomputing its target per-column / documenting the convention)."
+}

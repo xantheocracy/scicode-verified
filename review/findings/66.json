@@ -1,0 +1,111 @@
+{
+  "problem_id": "66",
+  "split": "test",
+  "reviewer_model": "fable",
+  "steps_reviewed": 6,
+  "steps": [
+    {
+      "step_number": "66.1",
+      "static_ok": false,
+      "dynamic_status": "partial",
+      "notes": "Reverse-engineered convention (sublattice-blocked order, a1=(a,0), a2=(a/2,+sqrt3 a/2), B offset (0,a/sqrt3), i,j in -n..n, s added to all y) PASSES; equally natural per-cell interleaved ordering of the SAME atom set FAILS positional allclose."
+    },
+    {
+      "step_number": "66.2",
+      "static_ok": false,
+      "dynamic_status": "partial",
+      "notes": "Literal implementation (normalize each of the 3 cross products) -> 0/0 -> nan -> official FAIL; zero-guard or unnormalized-average variants PASS; trivial sign(z)*z-hat hack also PASSES. Docstring return shape '(natoms,)' wrong (target is (natoms,3))."
+    },
+    {
+      "step_number": "66.3",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Literal repulsive formula (no A term, no taper) matches targets exactly; full-V formula shown in step text is disambiguated by background + missing A parameter."
+    },
+    {
+      "step_number": "66.4",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "pot = -A*(r/z0)^-6 matches all targets exactly."
+    },
+    {
+      "step_number": "66.5",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Taper polynomial matches (1, 0.5, 0). The documented 'zero when x>1' branch is never tested (all test r <= rcut; poly is 0 at x=1 anyway)."
+    },
+    {
+      "step_number": "66.6",
+      "static_ok": false,
+      "dynamic_status": "partial",
+      "notes": "Targets 0-2 equal double-sum/(ntop+nbot) to 4e-16 rel. (N=484/1764/6724); formula-faithful total-energy impl FAILS, undocumented per-atom version PASSES official joint run. Tests 3-5 have a precedence bug making them one-sided. Description's 'Use the following values' parameter block contradicts header defaults and is corrupted (C = E-2)."
+    }
+  ],
+  "findings": [
+    {
+      "step_number": "66.1",
+      "defect_type": "D4",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "Prompt only pins orientation ('Make sure the armchair direction is along the y-axis and the zigzag direction is along the x-axis'); nothing specifies row ordering, lattice-vector sign, basis-atom offsets, or loop nesting, yet the test is positional: `assert np.allclose(generate_monolayer_graphene(s, a, z, n), target)`. The h5 target encodes one specific construction: all 9 A-sublattice atoms first, then all 9 B-sublattice atoms (B offset (0, a/sqrt(3))), lattice vectors a1=(a,0), a2=(a/2, +a*sqrt(3)/2), i (a1 index) outer / j inner, each -n..n, with s added to the y of every atom. Dynamic proof: review/work/66/step_66.1_block.py (that convention) -> 'RESULT step 66.1: PASS'; review/work/66/step_66.1_interleaved.py, which generates the IDENTICAL atom set but appends (A,B) per cell -> 'RESULT step 66.1: FAIL (official joint scoring)'. At least ordering (block vs interleaved), a2 sign, B-offset sign, and loop nesting are each two-way coin flips a competent solver cannot resolve from the text.",
+      "suggested_fix": "Either compare order-insensitively (sort rows before allclose / compare as sets) or state the construction explicitly in the prompt: 'return the (2n+1)^2 A-sublattice atoms first (x-index outer loop from -n to n, then y-index), followed by the B-sublattice atoms at offset (0, a/sqrt(3)); lattice vectors (a,0,0) and (a/2, a*sqrt(3)/2, 0); add s to the y-coordinate of every atom.'"
+    },
+    {
+      "step_number": "66.2",
+      "defect_type": "D4",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "Spec: 'A normal vector at an atom is defined by averaging the 3 normalized cross products of vectors from this atom to its 3 nearest neighbors.' On the test geometry itself (generate_monolayer_graphene(0,2.46,1.8,1), 18-atom flake), edge atom 14 at (1.23, 3.55) has 3-nearest-neighbor distances [1.4203, 2.46, 2.46] where the two 2.46-neighbors (selected by argsort tie-breaking among several equidistant atoms) are ANTIPARALLEL, so one cross product is the zero vector; normalizing it as instructed gives 0/0 -> nan -> np.allclose False. Dynamic proof: literal implementation review/work/66/step_66.2.py -> 'RESULT step 66.2: FAIL' with 'RuntimeWarning: invalid value encountered in divide'; adding an unstated zero-norm guard (review/work/66/step_66.2_guarded.py) -> PASS; skipping the per-cross normalization entirely (contradicting 'normalized cross products') also PASSES. The pairing convention is also unstated: cyclic pairs (n1xn2, n2xn3, n3xn1) work, but the equally plausible (n1xn2, n1xn3, n2xn3) yields an exactly-cancelling sum on edge atoms -> nan -> FAIL (verified offline, all 3 tests False). '3 nearest neighbors' is additionally non-unique at flake edges (3rd/4th neighbors tie at distance 2.46), so which pair is antiparallel depends on tie-breaking.",
+      "suggested_fix": "Use interior-bulk geometry for tests (or n large enough that every tested atom has 3 true bonded neighbors), or specify the edge handling: 'normalize each cross product unless it is the zero vector (skip zero crosses); take cross products of cyclically consecutive neighbor vectors'. Alternatively define the normal via the average of UNnormalized cross products."
+    },
+    {
+      "step_number": "66.2",
+      "defect_type": "D10",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "Both the step description ('Return the normalized normal vectors of shape `(natoms,)`') and the docstring ('Returns: normed_cross_avg (np.array): Shape (natoms,)') state a 1-D return, but the h5 targets are shape (18, 3) — normals are 3-vectors. Also the last sentence of the description is truncated: 'Correct normal vectors in the wrong direction by multiplying by -' (missing '1').",
+      "suggested_fix": "Change both shape statements to '(natoms, 3)' and complete the truncated sentence to 'multiplying by -1'."
+    },
+    {
+      "step_number": "66.2",
+      "defect_type": "D8",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "All three tests use perfectly FLAT layers, whose targets are exactly (0,0,-1)/(0,0,+1) per atom. A trivial implementation that ignores the specified cross-product algorithm entirely and returns -z-hat for z>0 and +z-hat for z<0 (review/work/66/step_66.2_trivial.py) gets 'RESULT step 66.2: PASS (official joint scoring)'. The entire specified neighbor/cross-product computation is unconstrained by the tests — ironically the trivial hack passes while the literal spec-faithful implementation fails with nan (see the D4 finding).",
+      "suggested_fix": "Add at least one test with a corrugated/non-planar geometry (e.g., atoms displaced sinusoidally in z) so the cross-product averaging is actually exercised."
+    },
+    {
+      "step_number": "66.5",
+      "defect_type": "D8",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "The prompt explicitly requires the taper 'is zero when x_ij > 1', but the tests only evaluate r = 0, 8, 16 (x <= 1), and the bare polynomial already gives 0 at x=1. An implementation omitting the cutoff branch passes this step while violating the spec (the polynomial blows up to +20 x^7 for x>1, which would corrupt any downstream use without an independent r<rcut mask).",
+      "suggested_fix": "Add a test case with r > rcut, e.g. taper(np.array([20.0]), 16) with target 0."
+    },
+    {
+      "step_number": "66.6",
+      "defect_type": "D4",
+      "severity": "blocker",
+      "confidence": "high",
+      "evidence": "The step (and the main problem description) define E^KC = sum_{i=1}^{Ntop} sum_{j=1}^{Nbot} Tap(r_ij) V_ij and the docstring says only 'Returns: potential (float): evaluted KC energy'. The frozen targets are that double sum DIVIDED BY THE TOTAL NUMBER OF ATOMS (ntop+nbot): my formula-faithful implementation gives 85.4459433, -3711.8763918, -22656.7519428 for tests 0-2 (n=5,10,20), and dividing by N_total = 484, 1764, 6724 reproduces the targets 0.1765412052606555, -2.104238317331091, -3.3695347922018146 with relative error <= 6e-15. Dynamic proof: review/work/66/step_66.6.py (plain double sum) -> 'RESULT step 66.6: FAIL' (tests 1-3 fail in isolation); review/work/66/step_66.6_peratom.py (identical except '/ (len(top)+len(bot))') -> 'RESULT step 66.6: PASS (official joint scoring)'. Per-atom normalization is stated nowhere and contradicts the displayed equation, so no faithful implementation can pass.",
+      "suggested_fix": "Either state in the prompt/docstring 'return the energy PER ATOM, i.e. the double sum divided by (ntop + nbot)' or regenerate the targets from the un-normalized double sum."
+    },
+    {
+      "step_number": "66.6",
+      "defect_type": "D10",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "The step description commands: 'Use the following values for KC parameters: z0 = 3.416084, C0 = 20.021583, C2 = 10.9055107, C4 = 4.2756354, C = E-2, delta = 0.8447122, lamda = 2.9360584, A = 14.3132588, rcut = 16' — note 'C = E-2' is corrupted/unparseable (missing mantissa). The function_header carries a DIFFERENT default set (z0=3.370060885645178, C0=21.78333851687074, C2=10.469388694543325, C4=8.864962486046355, C=1.3157376477e-05, delta=0.723952360283636, lamda=3.283145920221462, A=13.090159601618883), and all tests call calc_potential(top, bot) with no overrides. The targets encode the HEADER defaults (verified: per-atom energies match to 4e-16). A solver obeying the explicit instruction (hardcoding/overriding with the description's set) gets per-atom energies [-9.006, -18.843, -1.064] at d=3.2/3.6/7 (n=20) vs targets/refs built from the header set — tests 0-2 fail. The commented-out old refs in tests 3-5 (-10.539, -19.949, -1.122) are close to the description-set energies, showing the description block is a stale leftover from a superseded parameterization.",
+      "suggested_fix": "Delete the 'Use the following values...' block (or replace its numbers with the header defaults and fix 'C = E-2' to C = 1.3157376477e-05), so the prompt and the scoring parameters agree."
+    },
+    {
+      "step_number": "66.6",
+      "defect_type": "D8",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "Tests 3-5 read `assert (np.abs(energy - energy_ref < 2)) == target` (target=True). Operator precedence makes this np.abs((energy - energy_ref) < 2), i.e. a ONE-SIDED check 'energy < energy_ref + 2': an implementation returning -1e9 passes all three (verified: bool(np.abs(-1e9 - (-4.729) < 2)) is True), and the un-normalized total-energy implementation (-22656.8, -110310.2, -6035.8) also passes them. The intended check was np.abs(energy - energy_ref) < 2. Additionally energy_ref = -4.729262873294083 for test 3 (d=3.2, n=20) does not match the reference implementation's own output -3.3695 for the geometrically identical configuration of test 2; only the +/-2 band hides this. Tests 0-2 (strict allclose) still constrain the step, so this does not flip verdicts on its own.",
+      "suggested_fix": "Fix the parenthesization to `np.abs(energy - energy_ref) < 2` and regenerate energy_ref values from the actual reference implementation (test 3's geometry duplicates test 2, so its ref should be -3.3695...)."
+    }
+  ],
+  "overall_assessment": "Steps 66.3-66.5 are clean and pass with literal implementations, but the problem as a whole is unfair to score as-is. 66.6 is effectively unpassable for a faithful solver: the frozen targets are the documented double sum silently divided by the total atom count, and the prompt simultaneously instructs a stale, corrupted parameter set that contradicts the header defaults the targets actually use. 66.1 requires guessing an 8+-way unstated construction/ordering convention under positional allclose, and 66.2's literal definition produces nan on the test geometry itself while a trivial sign-of-z hack passes. Tests 3-5 of 66.6 are additionally one-sided due to a parenthesization bug."
+}

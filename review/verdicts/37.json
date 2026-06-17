@@ -1,0 +1,65 @@
+{
+  "problem_id": "37",
+  "verifier_model": "fable",
+  "n_confirmed": 6,
+  "n_refuted": 0,
+  "n_uncertain": 0,
+  "verdicts": [
+    {
+      "step_number": "37.1",
+      "defect_type": "D10",
+      "verdict": "confirmed",
+      "tier": "B",
+      "revised_severity": null,
+      "fix_kind": "doc_edit",
+      "one_liner": "Eq (1)/(2) quotes accurate (l'=r*i/u'+r with unprimed i, numerator missing n/n'), contradicting eq (5)'s sin I'; literal-prompt impl re-ran FAIL, textbook impl PASS via steptest."
+    },
+    {
+      "step_number": "37.1",
+      "defect_type": "D4",
+      "verdict": "confirmed",
+      "tier": "B",
+      "revised_severity": null,
+      "fix_kind": "prompt_edit",
+      "one_liner": "Passing impl uses seq [n_total,n1,n2,n_total] and never references n3 (decoy proven structurally); docstring quotes accurate, all tests pass n2==n1, doublet/literal readings unstated; steptest PASS re-confirmed."
+    },
+    {
+      "step_number": "37.2",
+      "defect_type": "D4",
+      "verdict": "confirmed",
+      "tier": "B",
+      "revised_severity": null,
+      "fix_kind": "prompt_edit",
+      "one_liner": "Same hidden media mapping with sinI1=h1/r1, U1=0 re-ran PASS on exact-trace targets; GPT-5 results file exists and shows 0/3 as cited."
+    },
+    {
+      "step_number": "37.3",
+      "defect_type": "D4",
+      "verdict": "confirmed",
+      "tier": "B",
+      "revised_severity": null,
+      "fix_kind": "doc_edit",
+      "one_liner": "Standard-convention impl (L31-l31) re-ran FAIL incl. test-4 boolean; swapped 'Axial'/'Paraxial' return labels verified in both headers, so the prompt's own labels point to the failing sign."
+    },
+    {
+      "step_number": "37.2",
+      "defect_type": "D10",
+      "verdict": "confirmed",
+      "tier": "A",
+      "revised_severity": null,
+      "fix_kind": "doc_edit",
+      "one_liner": "All quotes accurate: docstring says 'paraxial' for the non-paraxial step, background says 'paraxial ... angle >> 5 degree', prompt lists nonexistent 'light wavelength' and 'grid scaling factor' inputs."
+    },
+    {
+      "step_number": "37.1",
+      "defect_type": "D8",
+      "verdict": "confirmed",
+      "tier": "A",
+      "revised_severity": null,
+      "fix_kind": "test_edit",
+      "one_liner": "All test cases verified to pass n2==n1 and gold ignores n3, so surface-2 refraction and n3 are unconstrained; follows logically from the confirmed mapping (reviewer's ignore_n2n3 steptest PASS plausible)."
+    }
+  ],
+  "missed_defects": [],
+  "summary": "All 6 findings confirmed (4 re-run via steptest, 2 read-only): the background's paraxial equations are wrong, the media-to-index mapping is unstated with n3 a pure decoy, the aberration sign reverses the standard convention with swapped docstring labels arming the trap, plus garbled 37.2 docs and degenerate n2==n1 tests. Problem is fixable to fair via the first pass's doc/prompt edits plus a non-degenerate test case."
+}

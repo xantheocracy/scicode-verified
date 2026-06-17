@@ -1,0 +1,53 @@
+{
+  "problem_id": "43",
+  "split": "test",
+  "reviewer_model": "fable",
+  "steps_reviewed": 3,
+  "steps": [
+    {
+      "step_number": "43.1",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Rate equations fully specified in background; header matches test calls; vectorized (4,10) targets distinct per test; my literal implementation passes joint mode."
+    },
+    {
+      "step_number": "43.2",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Description prose pins all four residuals (ya[0]-Ppl, yb[1]-Ppr, ya[2]-R1*ya[3], yb[3]-R2*yb[2]); targets confirm exactly; passes. Minor doc sloppiness only: return labels call residuals 'boundary condition for rate of change of ... power' (they are power residuals, not rates) - not score-affecting."
+    },
+    {
+      "step_number": "43.3",
+      "static_ok": false,
+      "dynamic_status": "fail",
+      "notes": "Pout (rtol ~3e-7 across configs) and bool test 4 are robust, but the nz array comparison is unpassable: frozen target embeds the author's specific solve_bvp run; no natural correct implementation matches within np.allclose. Tests 1-3 fail, test 4 passes in isolation."
+    }
+  ],
+  "findings": [
+    {
+      "step_number": "43.3",
+      "defect_type": "D6",
+      "severity": "blocker",
+      "confidence": "high",
+      "evidence": "The frozen nz target (length 100, values 0.006-0.073) embeds the discretization error of the author's particular solve_bvp run at default tol=1e-3, which is ~1.2e-6 to 2.2e-6 absolute away from the TRUE converged solution, while cmp_tuple_or_list applies default np.allclose (required agreement atol+rtol*|t| = 7.2e-8 at nz~0.0062). Measured: fully converged runs (tol=1e-10, max_nodes=2e5) give maxabs|nz-target| = 1.19e-6 / 6.9e-7 / 2.15e-6 for tests 0/1/2 - all exceed the bound, so even a PERFECT solution fails. Exhaustive probe: 4 mesh sizes (10/50/100/200) x ~100 initial-guess combinations x 4 tolerances (1e-3..1e-10), nz evaluated both on sol.x and on fixed linspace(0,L,100), under BOTH scipy 1.15.2/numpy 2.2.6 and scipy 1.11.4/numpy 1.26.4 (review/work/43/diag.py, oldenv_test.py): closest any configuration gets is 1.14e-6 - never passes. Pout by contrast is robust (relative scatter ~3e-7, always passes), and bool test 4 passes; the nz comparison alone makes all three numeric tests fail (steptest joint: FAIL for both review/work/43/step_43.3.py and step_43.3_fixedgrid.py).",
+      "suggested_fix": "Regenerate the nz target from a tightly converged solve (tol<=1e-8) on a stated fixed grid, AND loosen the nz comparison to ~rtol=1e-3/atol=1e-6 (solve_bvp's own default accuracy); or compare only robust scalars (Pout, nz[0], nz mid/end values at loose tol) instead of the full mesh-noise-level array."
+    },
+    {
+      "step_number": "43.3",
+      "defect_type": "D4",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "The prompt/docstring spec for nz is only 'nz : ndarray - Normalized population inversion distribution along the length of the fiber' - no grid size or evaluation convention. The frozen target has exactly 100 points (= linspace(0,L,100)), but the natural reading (return nz on the BVP solution mesh sol.x) gives a solver-dependent length: measured 91-517 nodes across reasonable initial meshes of 10/50/100/200 points (a 100-point initial mesh refines to 218 on scipy 1.15.2; no tested configuration on either scipy generation ever ends with exactly 100 nodes). Length mismatch makes cmp_tuple_or_list raise/return False: e.g. 'ValueError: operands could not be broadcast together with shapes (218,) (100,)'. A solver must guess both the 100-point count and the evaluate-via-sol.sol-on-fixed-grid convention.",
+      "suggested_fix": "State in the step prompt and docstring: 'evaluate the solution on z = np.linspace(0, L, 100) (use sol.sol(z)) and return nz as the length-100 array of N2(z)/N on that grid'."
+    },
+    {
+      "step_number": "43.3",
+      "defect_type": "D4",
+      "severity": "major",
+      "confidence": "medium",
+      "evidence": "solve_bvp on these stiff laser rate equations is initial-guess-branch-sensitive and the prompt says nothing about the guess. Measured (100-pt mesh, defaults): signal guess 1 W converges with sol.status=0 (solver reports SUCCESS) to the trivial non-lasing branch, Pout=-1.2e-7 instead of 85.09 W; guess 10 W fails to converge (status=1, Pout=54.5); guesses >=30 W reach the lasing branch. A solver who seeds the signal small (a common default) silently gets the wrong branch with no error. Mitigating hint: step 43.1's test code shows a y_guess pattern with signal 30-70 W, so a diligent solver may copy it - hence major, not blocker (and the step is already blocked by the D6 finding regardless).",
+      "suggested_fix": "Specify the initial guess in the step prompt, e.g. 'initialize y_guess with y[0]=Ppl, y[1]=Ppr and both signal rows at ~Ppl (tens of watts) so the solver converges to the lasing solution'."
+    }
+  ],
+  "overall_assessment": "Steps 43.1 and 43.2 are clean: specs fully determine the targets and literal implementations pass. Step 43.3 is effectively unpassable as scored: the frozen nz array carries the author's own solve_bvp discretization noise (~1e-6, i.e. up to ~4.6e-5 relative) which exceeds the default np.allclose tolerance, so even a perfectly converged correct solution fails, on top of an unstated 100-point output grid and unstated initial guess. Since the final step decides the problem-level score, problem 43 will score 0 for every competent solver until the nz target/tolerance is fixed."
+}

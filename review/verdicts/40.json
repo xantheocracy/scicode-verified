@@ -1,0 +1,77 @@
+{
+  "problem_id": "40",
+  "split": "test",
+  "verifier_model": "fable",
+  "verdicts": [
+    {
+      "step_number": "40.2",
+      "defect_type": "D4",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "Wrote my own independent variants (review/work/40/verify/v_40_2_react_first.py, v_40_2_diff_first.py). steptest --problem 40 --step 40.2: reaction-first (f0=u^2 half steps, f1=alpha*u_xx full step) -> PASS; diffusion-first -> FAIL (official joint). Direct comparison vs h5 targets: reaction-first maxerr {0.0, 8.9e-16, 8.9e-16} on tests 0/1/2; diffusion-first maxerr {3.2e6, 2.9, 11.4}. Test-0 cell 0: target -0.904875 = reaction-first exactly; diffusion-first gives -0.9. Verified statically that neither the step prompt, the step background, nor the docstring assigns f0/f1 to a physical operator; the main equation 'alpha f''(u) + u^2' lists diffusion FIRST, so the text mildly points toward the failing choice. A competent solver faces an unguided binary choice; the wrong branch scores 0.",
+      "fix": {
+        "kind": "prompt_edit",
+        "target_location": "sub_steps[1].step_description_prompt",
+        "before": "Write a function performing first order strang splitting at each time step",
+        "after": "Write a function performing Strang splitting at each time step. Use f_0 = the reaction term u^2 (advanced in the two half-steps) and f_1 = the diffusion term alpha*u_xx (advanced in the single full step), each sub-step integrated with one forward-Euler step. Use second_diff (with its ghost-cell boundary treatment) for the diffusion operator.",
+        "side_effects": "None on targets (frozen targets already encode this convention). Step 40.3 calls Strang_splitting unchanged. Also removes the 'first order strang splitting' phrasing flagged in the D10 finding for this step."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "40.2",
+      "defect_type": "D10",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "medium",
+      "reproduction": "Static check of review/problems/40.json: sub_steps[1].step_description_prompt = 'Write a function performing first order strang splitting at each time step'; sub_steps[1].step_background = 'can be enhanced from $O(\\Delta t)$ to $O(\\Delta t^2)$ by employing Strang splitting.' Both quotes verified verbatim; 'first order strang spliting scheme' also appears in problem_description_main and sub_steps[2].step_description_prompt. Caveat the first pass missed: the phrase is RECONCILABLE - Strang splitting composed with first-order forward-Euler sub-steps is first-order overall, so the prompt is not strictly self-contradictory, just sloppy and confusing. That weakens 'self-contradictory' but the textual tension within one step is real and the doc fix is warranted. Minor severity is correct: the algorithm is fully spelled out in the background equations, so no score impact.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[1].step_description_prompt (and same phrase in problem_description_main and sub_steps[2].step_description_prompt)",
+        "before": "first order strang splitting",
+        "after": "Strang splitting (with first-order forward-Euler sub-steps)",
+        "side_effects": "Note: do NOT use the first pass's alternative wording 'Strang (second-order) splitting' - with Euler sub-steps the composite scheme is first-order overall, so calling it second-order would introduce a new inaccuracy. Subsumed by the D4 prompt_edit above if that is applied to 40.2."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "40.3",
+      "defect_type": "D2",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "h5 target shapes confirmed: 42/14/22 for tests 0/1/2 = round(2/(dt/CFL))+2 exactly. Ran 7 solve variants via review/work/40/verify/v_40_3.py through steptest (official joint): (a) natural diffusive-CFL reading dx=sqrt(alpha*dt/CFL), arange grid, round(T/dt) steps -> FAIL shape (30,) vs (42,); (b) reverse-engineered dx=dt/CFL, N=round(2/dx)+2 linspace, nsteps=round(T/dt)+1 -> PASS (maxerr <= 5.6e-17); (c) N=int(2/dx)+2 -> FAIL shape (13,) vs (14,) on test 1 because 2/dx = 11.999999999999998; (d) author-style ghost grid arange(-1-dx,1+dx,dx) -> FAIL shape (43,) vs (42,); (e) plain arange(-1,1+dx,dx) -> FAIL shape (41,) vs (42,). The prompt/docstring/problem_io give only 'CFL : Courant-Friedrichs-Lewy condition number' with no dx rule, no grid-point count, and the domain only via the main description's 'x in [-1,1]'. Even the semi-natural ghost-padded grid misses by one point, so the +2 construction is not derivable by any standard convention; alpha is unused in the dx rule despite this being a diffusion problem. Blocker stands: every natural or semi-natural construction fails on SHAPE before values are compared.",
+      "fix": {
+        "kind": "prompt_edit",
+        "target_location": "sub_steps[2].step_description_prompt (append) and sub_steps[2].function_header docstring",
+        "before": "Write a function to solve diffusion-reaction equation with second order spatial differentiate opeator and first order strang spliting scheme. Using first order forward Eurler as time stepping scheme.",
+        "after": "Write a function to solve the diffusion-reaction equation on x in [-1,1] with the second-order spatial operator (second_diff) and Strang splitting (Strang_splitting), using first-order forward Euler for each sub-step. Discretize as follows: set dx = dt/CFL; use N = round(2/dx) + 2 equally spaced grid points x = np.linspace(-1, 1, N) (use round, not int, to avoid floating-point truncation); initialize u_i = -1 where x_i < 0 and u_i = +1 where x_i >= 0; advance the solution for t in np.arange(0, T+dt, dt), i.e. round(T/dt)+1 Strang steps, and return the final u.",
+        "side_effects": "None on targets (this documents exactly what the frozen targets encode; variant (b) reproduces all three to <=5.6e-17). The 'round(T/dt)+1 steps' clause is the companion D7 fix; if targets are instead regenerated at t=T, drop that clause. problem_io's CFL description could optionally gain 'CFL = dt/dx' for consistency."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "40.3",
+      "defect_type": "D7",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "With the otherwise-exact grid (dx=dt/CFL, N=round(2/dx)+2): nsteps=round(T/dt) (solution at the documented 'Max time' T) -> steptest FAIL, maxerr {2.65e-2, 1.03e-1, 3.07e-2} on tests 0/1/2; nsteps=int(T/dt)+1 -> FAIL test 1 only (maxerr 1.03e-1; T/dt = 5.999999999999999 so int truncates); nsteps=round(T/dt)+1 -> PASS with maxerr <= 5.6e-17. The frozen targets are therefore the solution at t = T + dt, one step past the docstring's 'T : Max time, float' - consistent with a reference loop 'for t in np.arange(0, T+dt, dt)' that steps at t=T. Off-by-one confirmed; even the fp-equivalent-looking int(T/dt)+1 fails, so only the exact round form (or len(np.arange(0,T+dt,dt))) matches.",
+      "fix": {
+        "kind": "prompt_edit",
+        "target_location": "sub_steps[2].function_header docstring, line 'T   : Max time, float'",
+        "before": "T   : Max time, float",
+        "after": "T   : Max time, float. The time loop runs for t in np.arange(0, T+dt, dt), i.e. round(T/dt)+1 forward steps (the returned solution is at t = T + dt).",
+        "side_effects": "Preserves frozen targets (preferred on test split where no gold code exists to regenerate from). Alternative: target_regen with exactly round(T/dt) steps so the return is truly u(T) - recipe = variant 'reveng_T' in review/work/40/verify/v_40_3.py - but that requires trusting a non-author reference and re-freezing 3 h5 targets. Subsumed by the D2 prompt_edit above if applied in full."
+      },
+      "uncertainty_notes": null
+    }
+  ],
+  "missed_defects": [],
+  "summary": "All 4 first-pass findings confirmed at their original severities (4 confirmed / 0 refuted / 0 uncertain): 40.2's unstated f0=reaction assignment (D4 major, wrong branch scores 0), the cosmetic 'first order strang splitting' wording (D10 minor, though reconcilable as composite order), 40.3's non-derivable grid construction dx=dt/CFL with N=round(2/dx)+2 (D2 blocker - every natural construction fails on shape, even the ghost-padded arange grid gives 43 vs 42), and the off-by-one time loop ending at T+dt (D7 major). Spot checks found no missed defects (deps clean, all signatures match, 40.1 trivial return-0 fails, no exact-zero gates or seeds). The problem is fully fixable to fair with prompt edits alone - no target regeneration needed: pin f0/f1 in 40.2 and spell out the discretization plus step count in 40.3."
+}

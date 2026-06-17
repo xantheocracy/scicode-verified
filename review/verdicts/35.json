@@ -1,0 +1,27 @@
+{
+  "problem_id": "35",
+  "verifier_model": "fable",
+  "n_confirmed": 3, "n_refuted": 0, "n_uncertain": 0,
+  "verdicts": [
+    {"step_number": "35.2", "defect_type": "D2",
+     "verdict": "confirmed",
+     "tier": "A",
+     "revised_severity": null,
+     "fix_kind": "prompt_edit",
+     "one_liner": "Quote accurate: prompt reads '...i,j,k are at least The output should be in ascending order.' — lower bound truncated; >=1 vs >=0 give different answers and GPT-5 demonstrably guessed >=0; major stands."},
+    {"step_number": "35.3", "defect_type": "D10",
+     "verdict": "confirmed",
+     "tier": "A",
+     "revised_severity": null,
+     "fix_kind": "prompt_edit",
+     "one_liner": "Quote accurate: prompt body says 'smallest N non-zero energy levels' but docstring/targets are photon wavelengths (test 0's >1e10 only makes sense in nm); background item 3 ends mid-sentence at 'by using'; minor is right since docstring pins it."},
+    {"step_number": "35.2", "defect_type": "D8",
+     "verdict": "confirmed",
+     "tier": "A",
+     "revised_severity": null,
+     "fix_kind": "test_edit",
+     "one_liner": "Quote accurate: all order-sensitive tests wrap output in sorted()/sorted()[::-1], so the stated ascending/descending contracts are unenforced dead text; minor is right (cannot mis-score correct code)."}
+  ],
+  "missed_defects": [],
+  "summary": "All 3 findings confirmed by direct reading of review/problems/35.json (truncated coefficient bound in 35.2, energy-vs-wavelength contradiction plus truncated background item in 35.3, unenforced ordering in tests). Severities are well calibrated; the problem is fair after the one-word 'at least 1' restoration and minor doc edits."
+}

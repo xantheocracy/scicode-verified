@@ -1,0 +1,20 @@
+{
+  "problem_id": "3",
+  "verifier_model": "fable",
+  "n_confirmed": 1,
+  "n_refuted": 0,
+  "n_uncertain": 0,
+  "verdicts": [
+    {
+      "step_number": "3.1",
+      "defect_type": "D4",
+      "verdict": "confirmed",
+      "tier": "A",
+      "revised_severity": null,
+      "fix_kind": "doc_edit",
+      "one_liner": "Quote verbatim in prompt; literally M=D-L with L=tril(A) is the wrong GS splitting (correct M=tril(A)=D+strict lower), but the background's component-wise update disambiguates, so minor is right."
+    }
+  ],
+  "missed_defects": [],
+  "summary": "1 confirmed, 0 refuted, 0 uncertain. The single minor D4 (sign-convention sloppiness in the splitting sentence) is real but fully disambiguated by the background formula; problem is fair as-is and trivially fixable with the suggested rewording."
+}

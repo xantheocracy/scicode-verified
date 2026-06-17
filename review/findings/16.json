@@ -1,0 +1,47 @@
+{
+  "problem_id": "16",
+  "split": "test",
+  "reviewer_model": "fable",
+  "steps_reviewed": 2,
+  "steps": [
+    {
+      "step_number": "16.1",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Canonical reading (A = diag(1..n) + noise*randn(n,n), then (A+A.T)/2) passes 3/3. Targets pin the construction; 'all elements' in the prompt correctly implies noisy diagonal too (target test 2 diag[0]=0.9196 != 1.0). Add-vs-multiply and per-element-vs-scalar readings are disambiguated by context (multiply/scalar make the symmetrize instruction vacuous and destroy the stated increasing-diagonal structure). Diagonal start value (1, step 1) is stated only in problem_description_main, which is in prompt context."
+    },
+    {
+      "step_number": "16.2",
+      "static_ok": false,
+      "dynamic_status": "pass",
+      "notes": "Two honest Davidson variants pass 3/3 (residual-guarded; and unguarded-but-lucky). Targets equal np.linalg.eigh lowest-k within allclose (max diff 1.6e-8). BUT: (a) tests are unconstraining - sorted diagonal entries pass all 3; (b) noise=0 test 1 puts the prescribed preconditioner formula exactly at 0/0 and standard normalize/Gram-Schmidt variants crash with LinAlgError."
+    }
+  ],
+  "findings": [
+    {
+      "step_number": "16.2",
+      "defect_type": "D8",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "Noise levels in all three tests (0.0, 1e-4, 1e-5) are so small that the true eigenvalues differ from the bare diagonal entries only at second order (~noise^2/gap <= 3e-8), far below np.allclose default rtol=1e-5. Empirically verified: the wrong 'solver' `np.sort(np.diag(matrixA))[:num_eigenvalues]` (no eigensolving at all) passes ALL 3 tests (max diffs 0.0, 2.95e-08, 2.31e-10 vs h5 targets). Even the constant output np.arange(1,k+1) passes tests 1 and 3. Critically, with unit-vector initial guesses the FIRST-iteration Ritz values of Davidson are exactly the smallest diagonal entries, so a broken Davidson whose loop never iterates (wrong convergence test, immediate exit) gets full credit on every test. The test suite cannot detect whether any subspace iteration/diagonalization occurred.",
+      "suggested_fix": "Use substantially larger noise (e.g., 0.01-0.1) in at least one test so the lowest eigenvalues differ from the diagonal entries by >> rtol*|eigenvalue| (at noise=0.05 the shift is ~1e-3, easily resolved by allclose), or compare with a tightened tolerance (e.g., atol=1e-9, rtol=1e-9) consistent with the requested 1e-8 convergence threshold."
+    },
+    {
+      "step_number": "16.2",
+      "defect_type": "D4",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "Test 1 is `davidson_solver(init_matrix(100, 0.0), 2, 1e-8)`: with noise=0 the matrix is EXACTLY diagonal, so the converged Ritz value lambda_i exactly equals a diagonal entry and the background's prescribed correction 'q_i = - r_i / (diag(A) - lambda_i)' is an exact 0/0 (verified: RuntimeWarning 'invalid value encountered in divide'). The prompt never states where the convergence check goes relative to steps 3-5 or that converged roots / zero denominators must be guarded. Empirically: (i) a Davidson that checks residual norm BEFORE building corrections passes 3/3; (ii) the literal steps-3-5 implementation (correction computed every iteration, eigenvalue-change convergence) emits nan correction vectors yet happens to pass on this OpenBLAS build only because np.linalg.qr of a nan-containing matrix returned finite Q - undefined LAPACK behavior, i.e. platform luck; (iii) three completely standard variants that Gram-Schmidt-orthogonalize and/or normalize the correction vector before appending (the most common textbook/reference pattern) all crash with 'numpy.linalg.LinAlgError: Eigenvalues did not converge' on test 1 and would score 0 despite being correct Davidson implementations.",
+      "suggested_fix": "Either use nonzero noise in test 1 (e.g., 1e-4, which also helps the D8 finding), or add one sentence to the step prompt: 'skip the correction vector for already-converged roots (or floor |diag(A)-lambda_i| at a small epsilon) to avoid division by zero'."
+    },
+    {
+      "step_number": "16.2",
+      "defect_type": "D10",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "Background says 'Initialize : Define n vectors b = {b_1,...b_n} with n the dimension of A'. Taken literally, the initial subspace spans the full space (n = dim(A) = up to 1000), which makes the projection step a full diagonalization and contradicts the iterative 'Append the correction vector to b' step (nothing left to append). The intended meaning is a small initial guess block (>= num_eigenvalues vectors). Does not flip scores: both the literal full-space reading and any sensible small-block reading converge to the same eigenvalues and pass.",
+      "suggested_fix": "Change the background to 'Define k initial guess vectors b = {b_1,...,b_k} with k >= num_eigenvalues (k << n, the dimension of A)'."
+    }
+  ],
+  "overall_assessment": "Step 16.1 is clean: signatures match, the construction is pinned by targets and inferable from the prompt, and the canonical implementation passes 3/3. Step 16.2's targets are correct (they equal eigh's lowest-k), but the test design is weak in both directions: the tiny noise levels mean a solver that never diagonalizes anything (sorted diagonal entries, or a Davidson whose loop exits after the first iteration) passes all three tests (false positive), while the noise=0 test sits exactly on the 0/0 singularity of the prescribed diagonal preconditioner, crashing standard normalize/orthogonalize Davidson variants (false negative; passing depends on an unstated guard or undefined LAPACK nan behavior). Scoring as-is will systematically over-credit broken solvers and randomly fail a class of correct ones on test 1; raising the noise in at least one test fixes both issues."
+}

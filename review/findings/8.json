@@ -1,0 +1,25 @@
+{
+  "problem_id": "8",
+  "split": "test",
+  "reviewer_model": "fable",
+  "steps_reviewed": 1,
+  "steps": [
+    {
+      "step_number": "8.1",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Expert literal-reading impl (fftshift-centered mask, strict |f|<bandwidth cross, np.real of ifft2) passes 4/4. Signature matches all test calls (image_array, bandwidth). Targets present (4/4), shapes consistent: tests 0-2 are (T 800x800 float, image 800x800 float) tuples, test 3 bool. Deterministic."
+    }
+  ],
+  "findings": [
+    {
+      "step_number": "8.1",
+      "defect_type": "D4",
+      "severity": "major",
+      "confidence": "medium",
+      "evidence": "The docstring only says 'T: 2D numpy array of float, The spatial filter used.' and the background only says 'Fourier transform the input image from spatial to spectral domain, apply the filter, and inversely FT the image back' -- nowhere is it stated that the returned mask T must be in the fftshift-ed (zero-frequency-centered) spectral layout. The frozen target encodes the CENTERED layout: for bandwidth=40 on an 800x800 image, target T has zero rows/cols exactly at indices 361..439 (center m//2=400, strict |f| < bandwidth). A physically identical implementation that builds the mask in natural FFT order (via np.fft.fftfreq) and applies it without fftshift produces the SAME filtered image (verified: np.allclose(filtered_centered, filtered_natural) == True; natural-layout T == np.ifftshift(target T) exactly) yet scores only 1/4 (review/work/8/alt_unshifted.py fails tests 0-2 on the elementwise T comparison; only the sum-based test 3 passes). The only disambiguating signal is that required_dependencies imports fftshift/ifftshift, which is a hint, not a specification.",
+      "suggested_fix": "Add one sentence to the docstring/prompt: 'Return T in the zero-frequency-centered (fftshift-ed) spectral layout, i.e. the mask as applied to fftshift(fft2(image)).' Alternatively, compare T up to fftshift in the test, or compare only the filtered image plus np.sum(T)."
+    }
+  ],
+  "overall_assessment": "Fair to score for a solver who follows the standard textbook recipe implied by the imported fftshift/ifftshift (centered mask, np.real(ifft2(...))): that reading passes 4/4, and the tricky inclusive/exclusive boundary IS explicitly disambiguated by 'The filter masks should not include the bandwidth frequency' (the inclusive variant correctly fails). The one real risk is the unstated requirement that the returned mask T be in fftshift-centered layout -- an equally correct natural-order implementation yields the identical filtered image but fails 3/4 tests. Lesser notes (not findings): returning np.abs instead of np.real of the inverse FFT fails test 0 (target has negative values, as a high-pass output must -- inferable, so not flagged); the raw complex ifft2 return passes; the background's 'Ouput the nxn array' vs input '[m,n]' is a typo with no scoring impact since all test images are square (800x800); tests 1-2 have near-zero filtered-image targets (degenerate) but the elementwise T comparison and test 0's nonzero image keep the suite constraining."
+}

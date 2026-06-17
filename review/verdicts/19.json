@@ -1,0 +1,29 @@
+{
+  "problem_id": "19",
+  "verifier_model": "fable",
+  "n_confirmed": 2,
+  "n_refuted": 0,
+  "n_uncertain": 0,
+  "verdicts": [
+    {
+      "step_number": "19.1",
+      "defect_type": "D1",
+      "verdict": "confirmed",
+      "tier": "A",
+      "revised_severity": null,
+      "fix_kind": "header_edit",
+      "one_liner": "Header is literally 'def tensor():' (zero params) while docstring says 'args: any number of arrays' and all three tests call tensor(a,b); fix to 'def tensor(*args):' stands."
+    },
+    {
+      "step_number": "19.2",
+      "defect_type": "D8",
+      "verdict": "confirmed",
+      "tier": "A",
+      "revised_severity": null,
+      "fix_kind": "test_edit",
+      "one_liner": "All four targets are exactly 0 or 1 (fixed points of squaring), and sigma_x^n equals sigma_y^n on all four real test states (Bell/GHZ4=1, W4/product=0 either way), so both wrong variants pass; minor is right given the explicit formula in the prompt."
+    }
+  ],
+  "missed_defects": [],
+  "summary": "Both findings confirmed by reading: the 19.1 zero-param header (major, header_edit) and the 19.2 all-{0,1} unconstraining test suite (minor, test_edit). Problem is fixable to fair with those two edits."
+}

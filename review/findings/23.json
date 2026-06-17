@@ -1,0 +1,53 @@
+{
+  "problem_id": "23",
+  "split": "test",
+  "reviewer_model": "fable",
+  "steps_reviewed": 3,
+  "steps": [
+    {
+      "step_number": "23.1",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "KL divergence in bits. Header matches calls; 0*log0=0 convention explicitly stated in background; targets are exact analytic values (1.0, 0.0, 2.0 bits). Masked implementation passes 3/3 joint and isolated. No q=0-where-p>0 edge case in tests, and none arises downstream (output marginal has full support for full-support priors). Clean."
+    },
+    {
+      "step_number": "23.2",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "mutual_info(channel, prior); docstring pins channel[i][j] = p(output i | input j). Targets are analytic: identity channel -> 1 bit; fully noisy -> ~0 (target 2.22e-16, atol covers exact-0 implementations); BEC(0.2) uniform prior -> 0.8. Passes 3/3. Trivial-impl probe: return 0.0 passes test 2 only, fails joint. Clean."
+    },
+    {
+      "step_number": "23.3",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Literal reading (init p = np.random.rand(n)/sum under the test's seed(0), update p_new ∝ p_old*exp(D) with D in bits, rate = mutual information, stop on |rate_new - rate| < e) passes 7/7 BITWISE, across three loop-shape variants (rate pre-computed, rate initialized 0, rate = sum(p*D)). rand/uniform(0,1)/random all share the same RNG stream, so the dominant init idiom is stream-identical. But test 3 (e=1e-5) is trajectory-fragile: see findings. Tests 1,2,4,5 (e=1e-8) are robust across ALL probed variants. Isolate mode also 7/7 (each test re-seeds; no cross-contamination)."
+    }
+  ],
+  "findings": [
+    {
+      "step_number": "23.3",
+      "defect_type": "D6",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "Test 3: 'channel = np.array([[0.8,0.5],[0.2,0.5]]); e = 1e-5; assert np.allclose(blahut_arimoto(channel,e), target)'. The frozen target 0.073166717019552 is an UNCONVERGED iterate: true capacity C* = 0.073193986 (computed with e=1e-14), i.e. the target sits 2.73e-5 BELOW C*, while np.allclose default tolerance is only 1e-8 + 1e-5*|target| = 7.4e-7. Per-iteration rate increments at the stopping point are ~1e-5..3.4e-5 (last deltas: 3.39e-5, 2.49e-5, 1.83e-5, 1.35e-5, 9.88e-6 -> stop), so ANY perturbation of the iteration trajectory shifts the stopped value far outside tolerance. Measured on equally-correct variants (probe_variants.py, all with seed 0): base-2 exponent 2**D instead of exp(D) -> off by 1.16e-5 FAIL; uniform init -> 1.13e-6 FAIL; softmax-of-random init -> 2.27e-6 FAIL; classic BA rate estimate log2(Z) -> 7.71e-6 FAIL; np.random.dirichlet init (a perfectly literal way to draw 'a random prior distribution') passes only by luck with margin 8.68e-8 vs tol 7.42e-7. Pattern-library 14.1: the test's np.random.seed(0) makes the solver's exact RNG-consumption pattern part of the spec, and the loose e=1e-5 freezes the target mid-convergence. The other six tests all use e=1e-8 and every probed variant passes them (residuals <= 6e-9).",
+      "suggested_fix": "Regenerate test 3's target with e=1e-8 (giving ~C* = 0.0731940, like all other tests) and change the test to e=1e-8; alternatively keep e=1e-5 but assert with atol=1e-4 so any stopping point within the e-band passes. Either change makes the test init- and base-independent."
+    },
+    {
+      "step_number": "23.3",
+      "defect_type": "D4",
+      "severity": "minor",
+      "confidence": "medium",
+      "evidence": "The update rule (main description and step background) applies a natural exponential to a base-2 KL divergence: 'p_{new}(x) = p_{old}(x)\\frac{\\exp(D(p(Y|x)||p(Y))}{\\sum_{x'}p_{old}(x')\\exp(D(p(Y|x')||p(Y))}' while step 23.1 mandates 'Use log with base 2'. In the standard Blahut-Arimoto derivation the exponent base matches the log base (2^D for bits), so exp(D_bits) reads like a typo a knowledgeable solver would silently 'fix' -- and the formula even has unbalanced parentheses ('\\exp(D(p(Y|x)||p(Y))' is missing a closing paren), reinforcing the typo impression. Both updates converge to the same fixed point (capacity), so 2**D passes all six e=1e-8 tests (max residual 6e-9) and fails ONLY the fragile test 3 (off by 1.16e-5). The prompt is literally unambiguous (it says exp), so this is filed minor; its only score impact is via the test-3 fragility above and disappears if that is fixed.",
+      "suggested_fix": "State the exponent base explicitly (e.g. 'use the natural exponential exp(), even though D is in bits') and balance the parentheses; or fix test 3 per the D6 finding, after which both bases pass."
+    },
+    {
+      "step_number": "23.3",
+      "defect_type": "D8",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "Test 6 is a verbatim copy of test 1 (same channel [[1,0,1/4],[0,1,1/4],[0,0,1/2]], same e=1e-8, bitwise-identical h5 target 1.0874628411165121) and test 7 is a verbatim copy of test 4 (BSC(0.8,0.2), target 0.278071903122179). They add zero constraint; pure copy-paste redundancy (general_tests duplicates the same list).",
+      "suggested_fix": "Drop tests 6 and 7 or replace them with distinct channels (e.g. a non-symmetric 3x2 channel)."
+    }
+  ],
+  "overall_assessment": "Steps 23.1 and 23.2 are clean: analytic targets, complete specs, headers match calls. Step 23.3's most literal implementation passes all 7 tests bitwise and is robust across common loop shapes, so the problem is solvable as-is. However, test 3 (the only one with e=1e-5) freezes an unconverged iterate 2.7e-5 below true capacity under a 7.4e-7 allclose tolerance, so it silently fails correct solutions that differ only in seeded-init draw method, exponent base (2^D vs the prompt's base-mixed exp), or the classic log2(Z) rate estimate. Fair to score for solvers who follow the prompt to the letter; unfair to equally-correct variants -- one regenerated target fixes it."
+}

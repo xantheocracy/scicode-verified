@@ -1,0 +1,81 @@
+{
+  "problem_id": "31",
+  "split": "test",
+  "verifier_model": "fable",
+  "verdicts": [
+    {
+      "step_number": "31.3",
+      "defect_type": "D6",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "Ran steptest joint mode with my own fresh re-implementation (review/work/31/verify/impl_best.py): 'RESULT step 31.3: FAIL (official joint scoring)'; --isolate gives 3/4 pass, only test 2/4 (index 1, the 3x8 input) fails. My implementation bit-matches tests 0/2/3 (maxdiff 1.8e-14 / 1.1e-14 / 5.5e-14) but misses test 1 by maxdiff 3.04. Reconstructed W from the frozen target (W = S @ Z.T @ inv(Z@Z.T); rows unit-norm, orthonormality err 3.7e-14): one further prompt-specified update from target row 1 gives dist = np.abs(np.abs(w @ w_new) - 1) = 3.036e-4 >> tol=1e-5 (rows 0 and 2 give 1.7e-7 and 0.0), and the dist sequence from the target decays only ~0.95x/step (3.04e-4 -> 2.89e-4 -> 2.74e-4 ...), so the target cannot be a converged exit -> the reference exited via max cycles=200. Chaos probe: a 1e-14 perturbation of the row-1 initial vector flips the exit from iteration 94 (spurious convergence-criterion trip during the transient) to MAX(200) and rotates the answer 47.4 deg; the perturbed max-cycles run lands within 1.48e-2 of the frozen target (still allclose-FAIL). Adversarial sweep (review/work/31/verify/attack_313.py): 12 additional bit-level variants (1/np.sqrt vs **-0.5 whiten, matmul groupings, np.mean func form, sum/T form, np.dot orderings, 4 deflation spellings, conv-check ordering) ALL bit-match tests 0/2/3 at ~1e-14 and ALL fail test 1 (maxdiff 3e-2 to 3.8): 0/12 pass all four. cycles=5000 does not help (my path still exits spuriously at iteration 94). The target is a bit-path-dependent non-converged snapshot; no honest reimplementation can reproduce it.",
+      "fix": {
+        "kind": "test_edit",
+        "target_location": "sub_steps[2].test_cases[1] (the 3x8-input test), the matching h5 entry under group '31.3', and the duplicate in general_tests[1]",
+        "before": "np.random.seed(0)\nassert np.allclose(ica(np.array([[ -4.        ,  -4.10199583,  -0.70436724,  -2.02846889,\n          2.84962972,  -1.19342653,   5.76905316,  -6.28790332],\n       [ -4.        ,  -6.47956934,   1.79067353,  -4.29994873,\n          4.71052915,  -2.73957041,   7.31309801,  -8.14395166],\n       [ -8.        ,  -6.58156517,  -2.91369371,  -2.32841762,\n          3.56015887,   0.06700306,   9.08215117, -10.43185497]]), cycles=200, tol=1e-5), target)",
+        "after": "DELETE this test case entirely (leaving tests 0, 2, 3, which are reproducible: all ~24 probed bit-level/structural variants of the correct algorithm either pass all three bit-exactly or fail all three). Re-index the h5 group '31.3' so the remaining targets stay aligned (remove the second test entry, shift the later two up), and delete the identical entry from general_tests.",
+        "regen_recipe": null,
+        "side_effects": "h5 group '31.3' must be re-indexed (its 4 stored targets become 3); general_tests[1] (verbatim duplicate) must be deleted in sync. No other step consumes this test. NOTE: simply raising cycles does NOT fix it - the convergence criterion |\\,|w.w_new|-1| < tol trips spuriously during the chaotic transient at different iterations for different bit-paths (verified: cycles=5000 still exits at iteration 94 on my path, 47 deg from the frozen target), so any target for this 3x8 input remains bit-path-dependent. Alternatives: replace the input with a longer time series whose iteration converges robustly (requires target_regen + a robustness sweep across bit-variants), or make the assert gauge-invariant (W@W.T==I plus source recovery up to sign/permutation) - a larger harness change."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "31.3",
+      "defect_type": "D5",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "Tests wrap every call in np.random.seed(0) while the prompt only says \"starting from a random vector `w`\". Reproduced in review/work/31/verify/check_313.py that each unstated choice is load-bearing even on the three stable tests: init np.random.randn instead of np.random.rand -> FAIL t0/t2/t3 (maxdiff 3.3/2.5/3.0, wrong sign/permutation of sources); rand WITHOUT initial normalization -> FAIL t0 (4.4e-3), t2 (4.0e-4), t3 (1.4e-4); deflation applied after normalization without re-normalizing (Maklin-tutorial order) -> FAIL all four (5.4e-2 to 3.8). Only init w=np.random.rand(nmix), normalized, with Gram-Schmidt deflation before per-iteration normalization reproduces targets 0/2/3 - none of which the prompt states ('orthogonally' is the only hint at deflation; re-normalization is only inferable from the |w.w_new|~1 criterion). Prompt typo verified verbatim: \"w_new = E[x g(w_curr dot x)] - w_curr E[dg (w_curr dot x]\" (unbalanced bracket).",
+      "fix": {
+        "kind": "prompt_edit",
+        "target_location": "sub_steps[2].step_description_prompt",
+        "before": "Find the unmixing matrix `W` of shape `(nmixtures, nmixtures)` by starting from a random vector `w` and iterating over `cycles` to orthogonally find a transformation component `w_rowidx` in Newton's method `w_new = E[x g(w_curr dot x)] - w_curr E[dg (w_curr dot x]` for that component.",
+        "after": "Find the unmixing matrix `W` of shape `(nmixtures, nmixtures)` row by row: initialize each row as `w = np.random.rand(nmixtures)` normalized to unit length, then iterate over `cycles` the Newton update `w_new = E[x g(w_curr dot x)] - w_curr E[dg(w_curr dot x)]`; after each update subtract the projections onto the previously found rows (`w_new -= W[:i].T @ (W[:i] @ w_new)`) and then normalize `w_new` to unit length.",
+        "regen_recipe": null,
+        "side_effects": "None on targets - this text pins exactly the algorithm the frozen targets already encode (verified: this recipe bit-matches targets 0/2/3 at ~1e-14). Also fixes the unbalanced-bracket typo. Does not rescue test 1 (see the D6 blocker)."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "31.2",
+      "defect_type": "D4",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "Probed 10 whitening constructions against the frozen target (review/work/31/verify/check_311_312.py). Exactly one matches: center-with-sd + np.cov (ddof=1) + PCA whitening diag(lam**-0.5) @ E.T @ Xc via la.eigh. Seven constructions satisfy the ONLY stated requirement - 'The covariance of `Z` must be an identity matrix' (the test's own test_identity(np.cov(Z)) returns True for them) - yet fail np.allclose(Z, v): ZCA (E @ D^-1/2 @ E.T @ Xc), Cholesky, SVD-based PCA (descending order -> row permutation/signs), and the center-only versions of each. ddof=0 covariance fails even the identity check (np.cov(Z) = 1.2*I at n=6). The spec determines Z only up to an orthogonal rotation, but the test pins one frozen gauge. One attack-found nuance: the 'center WITH sd-division' sub-choice is softer than the first pass implies, since reusing step 31.1's center() with its default divide_sd=True is the natural move - but the PCA-vs-ZCA-vs-Cholesky-vs-SVD fork plus eigh's ascending-order/sign conventions remain fully unconstrained, which alone sustains major.",
+      "fix": {
+        "kind": "prompt_edit",
+        "target_location": "sub_steps[1].step_description_prompt",
+        "before": "Write a Python function to whiten the mixture matrix `X`. Make sure to center `X` along the rows first. Return the whitened matrix `Z`. The covariance of `Z` must be an identity matrix.",
+        "after": "Write a Python function to whiten the mixture matrix `X`. First standardize `X` along the rows with `center(X)` (keeping the default `divide_sd=True`). Then compute the covariance `C = np.cov(X_standardized)`, eigendecompose it with `numpy.linalg.eigh` as `C = E diag(lam) E.T`, and return the PCA-whitened matrix `Z = np.diag(lam**-0.5) @ E.T @ X_standardized`. The covariance of `Z` must be an identity matrix.",
+        "regen_recipe": null,
+        "side_effects": "None on targets - this is exactly the construction the frozen targets encode (verified allclose=True on all 3 tests). Step 31.3's targets depend on this same whiten gauge, so pinning it here also makes 31.3's whitening derivable. Alternative: relax the test to gauge-invariant checks (cov(Z)=I plus Z = R @ Z_target for some orthogonal R), but that requires harness changes."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "31.1",
+      "defect_type": "D4",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Probed both ddof values against all 3 frozen targets (review/work/31/verify/check_311_312.py): ddof=0 matches bit-exactly (maxdiff 0.0 on all three); ddof=1 fails np.allclose with maxdiff 0.143/0.123/0.099 (scale factor sqrt(n/(n-1)) at n=6..10). The prompt ('standardize (center and divide SD)') never states ddof. Minor is correctly calibrated: np.std's default IS ddof=0, so the most natural numpy implementation passes; only a statistics-minded solver reaching for the sample SD (pandas default) fails. Internal inconsistency noted: 31.2 needs ddof=1 covariance (np.cov) while this step needs ddof=0 SD.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[0].function_header docstring, line 'divide_sd (bool): If True, divide by the standard deviation. Defaults to True.'",
+        "before": "divide_sd (bool): If True, divide by the standard deviation. Defaults to True.",
+        "after": "divide_sd (bool): If True, divide by the population standard deviation (np.std default, ddof=0). Defaults to True.",
+        "regen_recipe": null,
+        "side_effects": "None - documents the choice the targets already encode."
+      },
+      "uncertainty_notes": null
+    }
+  ],
+  "missed_defects": [],
+  "summary": "All 4 first-pass findings confirmed at their original severities (1 blocker, 2 major, 1 minor); 0 refuted, 0 uncertain. The 31.3 blocker is rock-solid: the frozen test-1 target provably violates the prompt's own convergence criterion (one-more-update dist 3.04e-4 >> tol 1e-5), and 24 probed structural/bit-level variants of the correct algorithm all bit-match tests 0/2/3 (~1e-14) while all failing test 1 - the target is a chaotic max-cycles snapshot reproducible only by the author's exact bits. The problem is fixable to fair with moderate effort: delete 31.3 test 1 (plus h5 re-index), then three cheap text edits (pin the whitening construction in 31.2, the init/deflation recipe in 31.3, the ddof in 31.1) make every remaining target derivable without any target regeneration. Spot-checks for missed defects (deps exec, header arity, target magnitudes vs atol, exact-zero asserts, degenerate targets) all came back clean."
+}

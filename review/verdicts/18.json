@@ -1,0 +1,94 @@
+{
+  "problem_id": "18",
+  "split": "test",
+  "verifier_model": "fable",
+  "verdicts": [
+    {
+      "step_number": "18.2",
+      "defect_type": "D7",
+      "original_severity": "blocker",
+      "verdict": "confirmed",
+      "revised_severity": "blocker",
+      "confidence": "high",
+      "reproduction": "Raw h5 inspection (h5py): '18.2/test1/var1' shape (2,) value [0.5, 1.0]; tests 2/3 are scalars 0.0625 and 0.14 — the reference itself produced inconsistent output shapes across tests. My own correct rational implementation (review/work/18/verify/nurbs_correct.py, 1-based Bspline, w[(i_1-1)*n_2+(i_2-1)] flattening): steptest joint FAIL with 'IndexError: index 4 is out of bounds for axis 0 with size 1' on test 0 (w=[0] has length 1, n_1*n_2=28 weights needed); isolate shows tests 2,3 PASS. Stacked-pair variant (verify/nurbs_stacked.py, returns np.array([B(xi_1,i_1),B(xi_2,i_2)])) passes ONLY test 0 ([0.5,1.0] exactly), fails 1,2 because the 1-based stacked values there are [0.125,0.5] and [0.56,0.25] while targets are the scalar PRODUCTS 0.0625=0.125*0.5 and 0.14=0.56*0.25. Since np.allclose(scalar,[0.5,1.0]) requires 0.5==1.0, no scalar passes test 0, and no 2-vector passes tests 1/2 unless both entries equal the scalar target (they don't). Only an adversarial input-branching function could pass all 3; no reading of the prompt produces one. Joint mode = official scoring: step 18.2 scores 0 for every solver.",
+      "fix": {
+        "kind": "test_edit",
+        "target_location": "sub_steps[1].test_cases[0] and h5 group '18.2'/test1",
+        "before": "p_1 = 2\np_2 = 2\nXi_1 = [0, 0, 0, 1, 2, 2, 3, 4, 4, 4]\nXi_2 = [0, 0, 0, 1, 2, 2, 2]\nw = [0]\ni_1 = 2\ni_2 = 1\nxi_1 = 1\nxi_2 = 0\nn_1 = len(Xi_1) - p_1 - 1\nn_2 = len(Xi_2) - p_2 - 1\nassert np.allclose(NURBS_2D(xi_1, xi_2, i_1, i_2, p_1, p_2, n_1, n_2, Xi_1, Xi_2, w), target)   [h5 target: array([0.5, 1.0])]",
+        "after": "p_1 = 2\np_2 = 2\nXi_1 = [0, 0, 0, 1, 2, 2, 3, 4, 4, 4]\nXi_2 = [0, 0, 0, 1, 2, 2, 2]\nn_1 = len(Xi_1) - p_1 - 1\nn_2 = len(Xi_2) - p_2 - 1\nw = np.linspace(0.5, 2.0, n_1*n_2)\ni_1 = 2\ni_2 = 1\nxi_1 = 1\nxi_2 = 0\nassert np.allclose(NURBS_2D(xi_1, xi_2, i_1, i_2, p_1, p_2, n_1, n_2, Xi_1, Xi_2, w), target)   [h5 target: scalar 0.43333333333333335]",
+        "regen_recipe": "review/work/18/verify/nurbs_correct.py: NURBS_2D(1, 0, 2, 1, 2, 2, 7, 4, [0,0,0,1,2,2,3,4,4,4], [0,0,0,1,2,2,2], np.linspace(0.5,2.0,28)) = 0.43333333333333335 (1-based Bspline, i_1-major flattening w[(i_1-1)*n_2+(i_2-1)]). NOTE: i_2-major flattening gives 0.47619047619047616, so the docstring MUST state the flattening order (see D8 fix) or the regenerated test is itself ambiguous.",
+        "side_effects": "general_tests[0] is a duplicate of this test case and must be updated identically. Same edit fixes the 18.2 docstring output line ('1d array of size 1 or 2' -> 'float'). Requires the D8 doc_edit (flattening order) to be applied with it, otherwise the new non-uniform-weight target introduces a fresh D4."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "18.1",
+      "defect_type": "D4",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "Wrote my own fresh implementations. 1-based (review/work/18/verify/b1.py, base case Xi[i-1] <= xi < Xi[i]): steptest joint PASS 3/3. Literal 0-based translation of the background formula 'B_{i,0}(t):= 1 if t_i <= t < t_{i+1}' (verify/b0.py, Xi[i] <= xi < Xi[i+1]): isolate 1/3 — fails tests 0 and 2 (computed 0.18 and 0.0625 vs frozen targets 0.81 and 0.4375), only passes the degenerate 0.0 target. Analytic confirmation: target 0.81 = (1-0.1)^2 = the FIRST quadratic basis function on the clamped knot vector [0,0,0,1,1,1], i.e. i=1 denotes basis function #1 (1-based). Nothing in prompt, docstring, or background states the base; both conventions are standard in the literature (Piegl & Tiller use 0-based, Wikipedia 1-based). Targets are invisible to the solver, so this is a pure guess; it also propagates into 18.2 (its passable tests only match with 1-based Bspline).",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[0].function_header docstring, line 'i : polynomial index , integer'",
+        "before": "i : polynomial index , integer",
+        "after": "i : index of the basis function, 1-based (i=1 is the first basis function; the degree-0 base case is Xi[i-1] <= xi < Xi[i]), integer",
+        "side_effects": "None on targets (frozen targets already encode 1-based). 18.2 reuses Bspline, so its tests become consistent automatically. Alternative (regenerate all 18.1 and 18.2 targets as 0-based) touches 6 h5 entries and is strictly more work."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "18.2",
+      "defect_type": "D8",
+      "original_severity": "major",
+      "verdict": "confirmed",
+      "revised_severity": "major",
+      "confidence": "high",
+      "reproduction": "verify/nurbs_ignore_w.py returns the plain tensor product Bspline(xi_1,i_1,p_1,Xi_1)*Bspline(xi_2,i_2,p_2,Xi_2), ignoring w and the rational normalization entirely. Under steptest --isolate it passes exactly the same tests (2 and 3) as the correct rational implementation — both give 0.0625 and 0.14 because tests 1 and 2 use unit weights (w=np.ones(n_1*n_2) and w=[1]*12), for which the denominator is 1 by partition of unity. Test 0 (the only non-unit-weight test, w=[0]) is the broken one (see D7). So the NURBS-specific content — weight indexing, the w flattening order over the 2D index grid, rational normalization — is constrained by NO passable test. I also verified the flattening order genuinely matters once weights are non-uniform: with w=linspace(0.5,2,28), i_1-major gives 0.4333..., i_2-major gives 0.4762....",
+      "fix": {
+        "kind": "test_edit",
+        "target_location": "sub_steps[1].test_cases[0] (same repaired test as the D7 fix) + sub_steps[1].function_header docstring line for w",
+        "before": "w : array storing NURBS weights, 1d array",
+        "after": "w : array storing NURBS weights, 1d array of length n_1*n_2, flattened so that weight of basis pair (i_1, i_2) is w[(i_1-1)*n_2 + (i_2-1)]",
+        "regen_recipe": "Covered by the D7 fix: repaired test 0 uses w=np.linspace(0.5,2.0,28) -> target 0.43333333333333335, which now exercises weight lookup, flattening order, and rational normalization (any implementation ignoring w returns 0.5 and fails).",
+        "side_effects": "Must be applied together with the D7 test-0 regeneration; on its own (docstring only) it documents a convention no test checks."
+      },
+      "uncertainty_notes": null
+    },
+    {
+      "step_number": "18.1",
+      "defect_type": "D10",
+      "original_severity": "minor",
+      "verdict": "confirmed",
+      "revised_severity": "minor",
+      "confidence": "high",
+      "reproduction": "Static check of review/problems/18.json. Docstring says 'xi : knot index, integer' but tests pass xi=0.1, 1.5, 0.5 (float parameter coordinates); 'i : polynomial index' though i is the basis-function index and p the degree; 'Outputs: 1d array of size 1，2 or 3' (with a full-width comma) while all three h5 targets are float64 scalars (shape (), values 0.81, 0.0, 0.4375 — verified via h5py). Matching contradiction in 18.2: header says 'N : ... 1d array of size 1 or 2' while problem_io says 'N : ... float'. Roles are recoverable from test-case magnitudes and the return_line, so minor is the right severity, but the garbled output spec could push a literal-minded solver toward array returns.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[0].function_header docstring (and sub_steps[1].function_header output line)",
+        "before": "xi : knot index, integer\n    i : polynomial index , integer\n    p : polynomial degree of basis function , integer\n    Xi : knot vector, 1d array of arbitrary size\n    Outputs:\n    1d array of size 1，2 or 3",
+        "after": "xi : evaluation point (parameter coordinate), float\n    i : index of the basis function, 1-based, integer\n    p : polynomial degree of the basis function, integer\n    Xi : knot vector, 1d array of arbitrary size\n    Outputs:\n    value of the basis function B_{i,p} at xi, float",
+        "side_effects": "Subsumes part of the D4 doc_edit (same docstring); also change 18.2's output line '1d array of size 1 or 2' -> 'float' to match problem_io and the (repaired) scalar targets."
+      },
+      "uncertainty_notes": null
+    }
+  ],
+  "missed_defects": [
+    {
+      "step_number": "18.1",
+      "defect_type": "D4",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "The background gives the bare Cox-de Boor recursion but never states the standard 0/0 := 0 convention, and EVERY test input has repeated knots: a literal guard-free translation raises 'ZeroDivisionError: float division by zero' already on test 0 (xi=0.1, i=1, p=2, Xi=[0,0,0,1,1,1]; reproduced). Minor because 0/0:=0 is the single canonical choice every B-spline treatment uses and the crash makes the issue immediately self-diagnosing, but the formula as printed is mathematically undefined on the benchmark's own inputs.",
+      "fix": {
+        "kind": "doc_edit",
+        "target_location": "sub_steps[0].step_background, after the recursion formula",
+        "before": "B_{i, p}(t):=\\frac{t-t_i}{t_{i+p}-t_i} B_{i, p-1}(t)+\\frac{t_{i+p+1}-t}{t_{i+p+1}-t_{i+1}} B_{i+1, p-1}(t) .",
+        "after": "B_{i, p}(t):=\\frac{t-t_i}{t_{i+p}-t_i} B_{i, p-1}(t)+\\frac{t_{i+p+1}-t}{t_{i+p+1}-t_{i+1}} B_{i+1, p-1}(t) .\n\nWhenever a fraction has a zero denominator (repeated knots), that term is defined to be zero (convention 0/0 := 0).",
+        "side_effects": "None; targets already follow this convention."
+      }
+    }
+  ],
+  "summary": "All 4 first-pass findings confirmed at their original severities (0 refuted, 0 uncertain), each by my own fresh reproduction: 18.2's test 0 is a hard blocker (w=[0] vs 28 needed weights, and a shape-(2,) target [0.5,1.0] that equals the stacked univariate B-spline pair, provably unreachable together with the scalar product targets of tests 1-2), 18.1 requires guessing the unstated 1-based index convention, 18.2's passable tests never exercise weights, and the docstrings are garbled. One missed minor defect added: the unstated 0/0:=0 convention makes the printed recursion crash literally on every test input. The problem is fixable to fair with moderate effort: three doc_edits plus one test_edit with a single regenerated h5 scalar (recipe and value 0.4333333333333334 provided); 18.1 needs no target changes."
+}

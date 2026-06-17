@@ -1,0 +1,12 @@
+{
+ "problem_id": "17",
+ "note": "17.2 \u539f DOS target \u7269\u7406\u7b97\u9519(\u4e2d\u95f4\u533a\u95f4\u516c\u5f0f\u9519,target/\u6b63\u786e\u6bd4\u503c\u4e0d\u7edf\u4e00 3.21/0.90/3.21)\u3002\u6b63\u786e\u503c=\u6807\u51c6Bl\u00f6chl\u7ebf\u6027\u56db\u9762\u4f53DOS(\u03a9_T/\u03a9_BZ=1),\u89e3\u6790\u4e0e\u72ec\u7acb\u8499\u7279\u5361\u6d1b\u53cc\u9a8c:[0.125,0.71,0.08]\u3002test\u96c6\u65e0gold,\u91cd\u7b97\u9489\u5728Bl\u00f6chl\u91cd\u5efa(MC\u4ea4\u53c9\u9a8c\u8bc1)\u3002",
+ "17.2": {
+  "0": 0.125,
+  "1": 0.71,
+  "2": 0.07999999999999996
+ },
+ "_rounds": [
+  "r1"
+ ]
+}

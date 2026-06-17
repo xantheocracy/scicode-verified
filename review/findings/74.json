@@ -1,0 +1,25 @@
+{
+  "problem_id": "74",
+  "split": "test",
+  "reviewer_model": "fable",
+  "steps_reviewed": 1,
+  "steps": [
+    {
+      "step_number": "74.1",
+      "static_ok": true,
+      "dynamic_status": "pass",
+      "notes": "Literal implementation of background's v = -sign(x1)||x||e1 - x, looping k=1..n and always applying the reflector, passes all 3 tests in joint (official) mode."
+    }
+  ],
+  "findings": [
+    {
+      "step_number": "74.1",
+      "defect_type": "D4",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "R of a QR factorization is unique only up to row signs; the row-sign convention is pinned solely by the background's reflector choice 'we choose v = -sign(x_1)||x||e_1-x' -- no loop structure is ever stated. For the square test (test 0, 3x3), the final k=3 subcolumn is the 1x1 scalar +1.498; the literal formula still reflects it (F = -1), and the h5 target encodes R[2,2] = -1.49801177. Equally standard Householder variants that skip a reflection when there is nothing below the diagonal to annihilate produce R[2,2] = +1.49801177 and fail ONLY test 0 (verified): (a) Golub-Van Loan house() with the sigma==0 short-circuit -> per-test pass [False, True, True]; (b) loop k=1..min(m-1,n) -> [False, True, True]; (c) np.linalg.qr(A, mode='complete')[1] (LAPACK geqrf, same sign choice elsewhere) -> [False, True, True], differing from the target only in the sign of R[2,2] (diff = 2.996). The two rectangular tests (m>n) never exercise this fork, so all variants agree there. A careful literal reading of the background (v != 0 even when the subvector is already e1-aligned, and Q_k defined for each k with F of size (m-k+1)) does pin the intended choice, so a competent reader can infer it -- hence minor, not major.",
+      "suggested_fix": "State the loop explicitly in the prompt/background (e.g. 'for k = 1..n, form v_k from the k-th subcolumn and apply F_k, including the final 1x1 subcolumn when m = n'), or relax test 0 to compare R up to row signs (e.g. assert allclose(abs(R), abs(target)) plus upper-triangularity), or replace the square test matrix with an m>n one so the fork is never exercised."
+    }
+  ],
+  "overall_assessment": "Fair to score as-is for a solver who implements the background's stated reflector literally: deps are numpy-only (no D12), signature matches all calls, output is deterministic, targets are non-degenerate m x n matrices that reject zeros/triu/positive-diagonal-R trivial or sign-flipped implementations, and the literal implementation passes all three tests in official joint mode. The single caveat is the square test case, where the sign of the last diagonal entry of R depends on applying the reflector to the final 1x1 subcolumn -- LAPACK/Golub-Van-Loan-style implementations (a mathematically correct QR with the same sign convention everywhere else) fail that one test. Tests 0 and 1 are mildly redundant (test 1's A is the first two columns of test 0's A, so target 1 is exactly target 0[:, :2]), but test 2 adds an independent rectangular case."
+}

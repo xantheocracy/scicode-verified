@@ -1,0 +1,20 @@
+{
+  "problem_id": "51",
+  "verifier_model": "fable",
+  "n_confirmed": 1,
+  "n_refuted": 0,
+  "n_uncertain": 0,
+  "verdicts": [
+    {
+      "step_number": "51.4",
+      "defect_type": "D10",
+      "verdict": "confirmed",
+      "tier": "A",
+      "revised_severity": null,
+      "fix_kind": "doc_edit",
+      "one_liner": "Quotes accurate: docstring says 'num_steps: total steps to run, float' and prompt says 'a float num_steps' (x2), yet gold uses range(num_steps) and all tests pass ints (10, 20, 1000); cosmetic type-annotation error, minor stands."
+    }
+  ],
+  "missed_defects": [],
+  "summary": "1/1 finding confirmed (minor D10 float-vs-int annotation on num_steps in 51.4); no refutations or uncertainties. Problem is fair to score as-is with a trivial doc edit."
+}

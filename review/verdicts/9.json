@@ -1,0 +1,20 @@
+{
+  "problem_id": "9",
+  "verifier_model": "fable",
+  "n_confirmed": 1,
+  "n_refuted": 0,
+  "n_uncertain": 0,
+  "verdicts": [
+    {
+      "step_number": "9.1",
+      "defect_type": "D10",
+      "verdict": "confirmed",
+      "tier": "B",
+      "revised_severity": "major",
+      "fix_kind": "doc_edit",
+      "one_liner": "Both quotes accurate: description defines M=D/omega (and cites I - omega*D^{-1}A), but background equation omits the (1-omega)x^k term; re-ran reviewer's literal-background impl via steptest -> 3/3 PASS, so frozen targets encode the non-standard formula; textbook weighted Jacobi converges to Ax=b (residual ~1e-3 vs target 0.107) and mathematically cannot match targets for omega != 1."
+    }
+  ],
+  "missed_defects": [],
+  "summary": "1/1 confirmed. The D10 internal contradiction is real and the frozen targets reward the mathematically incorrect background equation over the named/defined weighted Jacobi method; fixable to fair either by regenerating targets with the textbook update (preferred) or by rewriting the prompt to honestly specify the literal iteration and drop the M=D/omega claim."
+}

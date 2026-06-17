@@ -1,0 +1,27 @@
+{
+  "problem_id": "32",
+  "verifier_model": "fable",
+  "n_confirmed": 3, "n_refuted": 0, "n_uncertain": 0,
+  "verdicts": [
+    {"step_number": "32.2", "defect_type": "D4",
+     "verdict": "confirmed",
+     "tier": "B",
+     "revised_severity": null,
+     "fix_kind": "doc_edit",
+     "one_liner": "Header says 'h: Step size of the differentiation' with h=1e-6 while all lengths are meters; re-ran scratch: literal absolute-h central diff FAILS 32.2 (official joint), relative-step h*R_ij PASSES 3/3 — major stands."},
+    {"step_number": "32.2", "defect_type": "D2",
+     "verdict": "confirmed",
+     "tier": "A",
+     "revised_severity": null,
+     "fix_kind": "doc_edit",
+     "one_liner": "k_i appears only as an undefined symbol in the 32.2 background (and nowhere else in the prompt); the passing scratch impl indeed supplies off-prompt k_i = alpha*E_i^2/w^2 — major stands."},
+    {"step_number": "32.3", "defect_type": "D6",
+     "verdict": "confirmed",
+     "tier": "A",
+     "revised_severity": "minor",
+     "fix_kind": "test_edit",
+     "one_liner": "Test 4 quote accurate: abs(sum(nf)-sum(n0))<1e-6 with sum(n0)=39550742.17 demands ~2.5e-14 relative trace conservation over 1e5 RK4 steps — roundoff-fragile across platforms; minor as stated since all variants pass here and tests 1-3 dominate."}
+  ],
+  "missed_defects": [],
+  "summary": "All 3 findings confirmed: the 32.2 h-step convention (D4) and missing trap stiffness (D2) were verified by reading the prompt and re-running the first pass's literal vs relative scratch (FAIL vs PASS under official scoring); the 32.3 conservation-bound fragility (D6) is real but correctly rated minor. Problem is fixable to fair with the two 32.2 doc edits plus a roundoff-safe conservation bound."
+}

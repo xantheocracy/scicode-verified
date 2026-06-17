@@ -1,0 +1,11 @@
+{
+ "problem_id": "76",
+ "targets": {
+  "76.2": [
+   7.4987371267979475,
+   9.534370230773508,
+   0.0
+  ]
+ },
+ "note": "Round-2 (option a): 76.2 target regenerated to the domain-standard probability KL (true KL = sum p*ln(p/0.25) with per-row L1-normalized probabilities), matching the 76.2 'probability distribution' framing. Old (non-probability L2-direct) targets: test0 10.109957085675406, test1 12.865157650669998, test2 8.317766166719343 -> new 7.4987371267979475, 9.534370230773508, 0.0. 76.1 text and 76.4 target unchanged (76.4 assertions do not reference target; its failures are model bugs, not data). 76.2 prompt text unchanged (framing already correct)."
+}

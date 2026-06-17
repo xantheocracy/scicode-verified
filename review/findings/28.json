@@ -1,0 +1,101 @@
+{
+  "problem_id": "28",
+  "split": "test",
+  "reviewer_model": "fable",
+  "steps_reviewed": 3,
+  "steps": [
+    {
+      "step_number": "28.1",
+      "static_ok": false,
+      "dynamic_status": "fail",
+      "notes": "Officially FAIL (D12 simps ImportError before any solver code). Behind a simps->simpson shim: passes ONLY with unit-peak input amplitude E0=exp(-r^2/w0^2) on x=linspace(-L/2,L/2,N+1) (P1 target = pi*w0^2 to machine precision) AND a Fresnel/angular-spectrum transfer function built on frequency spacing df=1/L (fftfreq(N+1, d=L/(N+1)) or (arange(N+1)-N/2)/L; Fresnel kernel matches target to 1e-14, AS to 2.5e-8). The self-consistent fftfreq(N+1, d=L/N) fails all 3 tests (rel err 1.6e-3..3.1e-3 vs allowed ~0.8e-3..1.4e-3, atol-dominated). Unit-power normalization fails. Tests only assert two permutation-invariant scalars (sum|E|*dA), so spatially scrambled outputs pass. Test 3 (L=8mm, z=20m) is window-undersampled: target P2 deviates 11.6% from the physical power integral (wrap-around baked in), so an analytic no-FFT solution fails test 3."
+    },
+    {
+      "step_number": "28.2",
+      "static_ok": false,
+      "dynamic_status": "fail",
+      "notes": "Officially FAIL (D12). Shimmed: passes with the TARGET-INFORMED geometry: z = ABSOLUTE coordinate along the optical axis, input waist at z=s, thin lens (Mf1) at z=L1, piecewise q-propagation (q0 with 1/q0 = 1/R0 - i*lambda*Mp2/(pi*w0^2); w = sqrt(-lambda*Mp2/(pi*Im(1/q)))). Verified analytically: test1 min w=0.127007 at z=249.85 reproduced exactly. The docstring-literal reading ('z: distances from the lens', source at distance s before the lens) fails all 3 tests (focus argmin ~215 vs target ~718-832). L1 docstring ('distance from the first lens to the second one') describes a nonexistent second element; s docstring ('distance from source to first optical element') is also wrong under the encoded geometry (that distance is L1-s)."
+    },
+    {
+      "step_number": "28.3",
+      "static_ok": false,
+      "dynamic_status": "fail",
+      "notes": "Officially FAIL (D12). Shimmed: passes with Wz from step-2 function (target-informed geometry), focus_depth = z[argmin(Wz)] (grid value; the exact analytic focus 210.4389 vs target 210.5105 FAILS allclose), and 'Intensity' = unit-peak AMPLITUDE Gaussian exp(-r^2/w_min^2) on the (N+1,N+1) window (step-1 'before propagation' output). Returning physical intensity |E|^2 fails tests 1-3. Inputs mix units: all mm except L=16*10**-3 (= 16 um in the mm system), making the 'focal intensity' window 4x SMALLER than the 65-um waist (array values all in [0.97,1.0]) - the author's unit slip is baked into the target; pass-through passes, unit-correcting (L=16 mm) fails. Test 4 is a weak 2-boolean check (waist locally maximal at the lens), consistent with the encoded geometry."
+    }
+  ],
+  "findings": [
+    {
+      "step_number": "28.1-28.3 (all)",
+      "defect_type": "D12",
+      "severity": "blocker",
+      "confidence": "high",
+      "evidence": "KNOWN ISSUE (recorded for completeness). required_dependencies = \"import numpy as np\\nfrom scipy.integrate import simps\". scipy.integrate.simps was removed in scipy 1.14; review/scoring env has scipy 1.15.2. The harness prepends this string to every step's script, so every assembled test dies with \"ImportError: cannot import name 'simps' from 'scipy.integrate'\" before any solver code runs. steptest joint mode: 28.1, 28.2, 28.3 all FAIL with this ImportError for ANY submitted code. 0/3 steps guaranteed regardless of solution correctness.",
+      "suggested_fix": "Change required_dependencies to \"from scipy.integrate import simpson as simps\" (numerically identical) or pin scipy<1.14 in the eval environment. Note simps is not even used by the reference computations encoded in the targets."
+    },
+    {
+      "step_number": "28.2",
+      "defect_type": "D10",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "Docstring states: \"z: A 1d numpy array of float distances (in meters) from the lens where the waist size is to be calculated\", \"s: the distance (in meters) from the source (or initial beam waist) to the first optical element\", \"L1: The distance (in meters) from the first lens or optical element to the second one\". The frozen targets instead encode: z = ABSOLUTE axis coordinate, input waist AT z=s, lens AT z=L1; there is no second optical element. Verified: target wz[0]=0.43032 = w0*sqrt(1+((0-s)/zR)^2) for s=150 (beam 150mm BEFORE the lens), target argmin=832 (z=249.85 = L1+50, exactly the ABCD image of a waist 50mm=f before the lens). A docstring-literal implementation (q0 ->(+s)-> lens -> +z) reproduces wz[0] (thin lens preserves spot size) but fails all 3 tests: its focus argmin lands at index 213-218 vs target 718-832. The step description's phrase \"with given lens position and initial gaussian beam waist radius and position\" weakly hints the encoded geometry but directly contradicts the docstring. Borderline blocker: the explicit API documentation sends a competent solver to a 0-score implementation.",
+      "suggested_fix": "Rewrite the docstring: 'z: absolute positions along the propagation axis (the beam waist is located at z=s and the lens at z=L1; for z<L1 the beam propagates freely from the waist, for z>=L1 it has passed the lens)'. Fix s ('position of the initial waist on the z axis') and L1 ('position of the lens on the z axis'); delete the phantom 'second' element."
+    },
+    {
+      "step_number": "28.1",
+      "defect_type": "D4",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "The prompt only says \"The calculation needs to be done in fourier domain\"; no DFT discretization is specified. The grid has N+1 points spanning L (dx=L/N, pinned by the docstring shape and by P1). The standard self-consistent frequency grid fftfreq(N+1, d=L/N) gives P2 relative errors [3.10e-3, 1.61e-3, 1.91e-3] vs allowed (atol-dominated) tolerances [1.43e-3, 8.5e-4, 7.8e-4] -> ALL 3 tests fail. The targets require frequency spacing df=1/L, i.e. fftfreq(N+1, d=L/(N+1)) or (arange(N+1)-N/2)/L: with the Fresnel kernel exp(-i*pi*lambda*z*(fx^2+fy^2)) this matches P2 to 1e-14 (angular-spectrum kernel: 2.5e-8, also passes - the kernel choice is not the discriminator, only the spacing). Both spacings are common in textbook Fourier-optics code; nothing in prompt/background/docstring pins the authors' choice, and the (N+1)-points-across-L grid makes them genuinely inconsistent with each other. Test 3 additionally encodes 11.6% of wrap-around artifact relative to the physical power (window edge at 1.3*w(z)), so reproducing the exact discretization is mandatory, and an analytic (non-FFT) correct beam fails test 3 outright.",
+      "suggested_fix": "State the discretization in the docstring/background: 'use spatial frequencies f = (arange(N+1)-N/2)/L (spacing 1/L) and the Fresnel transfer function H = exp(-i*pi*lambda*z*(fx^2+fy^2))'. Alternatively loosen the test to a few-permille relative tolerance on (P1, P2) so both standard spacings pass."
+    },
+    {
+      "step_number": "28.1",
+      "defect_type": "D4",
+      "severity": "major",
+      "confidence": "medium",
+      "evidence": "Background: \"E(x,y,z) = c/omega(z) * exp(...)... c is a constant\" - c is never given, and the docstring says only 'absolute value of the beam's amplitude distribution' with no normalization. The targets require unit PEAK amplitude at the input plane: target P1 = 3.141592653581086e-06 = pi*w0^2 to machine precision = sum(exp(-r^2/w0^2))*dA. The equally physical unit-total-power normalization (sum|E|^2 dA = 1) fails all tests (verified), as does keeping the literal c/w0 prefactor with c=1. Confidence medium because unit-peak is the most common default and many solvers would choose it, but it is strictly a guess.",
+      "suggested_fix": "Add to the docstring: 'normalize the input field to unit peak amplitude, E(x,y,0)=exp(-(x^2+y^2)/w0^2)'."
+    },
+    {
+      "step_number": "28.3",
+      "defect_type": "D10",
+      "severity": "major",
+      "confidence": "high",
+      "evidence": "Docstring and problem_io: \"Intensity: float 2D array; The intensity distribution at new fcous after the lens\"; step prompt: \"calculate the intensity distribution at the new focus plane\". The frozen target element is NOT an intensity: it is the unit-peak AMPLITUDE exp(-(x^2+y^2)/w_min^2) (801x801 corner value 0.96981 = exp(-r_corner^2/w^2); the intensity value would be 0.9405). Verified dynamically: returning the amplitude passes all array comparisons; returning the squared field (physically correct intensity, |E|^2) FAILS tests 1-3. A competent solver implementing the word 'intensity' fails. Same amplitude/intensity conflation appears in 28.1's test comments ('The result is Intensity distrbution... total power, the intensity integrated over the cross section' applied to sum|E|), but those comments are invisible to the solver; the 28.3 docstring is visible.",
+      "suggested_fix": "Either re-freeze the 28.3 targets with Intensity = |E|^2, or change the docstring/prompt to 'the absolute field amplitude distribution at the new focus (unit peak), as returned by propagate_gaussian_beam'."
+    },
+    {
+      "step_number": "28.3",
+      "defect_type": "D4",
+      "severity": "minor",
+      "confidence": "medium",
+      "evidence": "\"find the new focus after the lens\" does not say how. Target focus_depth = z[np.argmin(Wz)] on the coarse 0.3mm grid (e.g. 210.5105105... = 701*300/999). A solver computing the exact analytic focus from the ABCD image (210.4389 for test 1) fails np.allclose (diff 0.072 vs allowed ~2.1e-3*210.5=0.44... actually rtol*|target|=2.1e-3? No: rtol=1e-5 gives 2.1e-3 absolute, diff 0.072 >> 2.1e-3 -> FAIL; verified dynamically allclose=False on all 3 tests). The default route (argmin of the Wz array just computed) passes, so most solvers are safe; flagged because the more careful physical solution is punished.",
+      "suggested_fix": "State in the docstring: 'focus_depth: the z-grid value at which Wz is minimal (z[argmin(Wz)])'."
+    },
+    {
+      "step_number": "28.1",
+      "defect_type": "D8",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "All three test cases assert only np.allclose((P1,P2), target) where P1,P2 are sum(gau)*dA - permutation-invariant scalars. Verified: returning np.fft.fftshift(Gau_Pro) (beam split into the four corners - spatially wrong) and Gau_Pro[::-1,:] both PASS all 3 tests. The step's documented output (a 2D spatial amplitude map) is never structurally checked, so any quadrant-shift/flip/transpose bug (classic fftshift mistakes) scores full marks on 28.1.",
+      "suggested_fix": "Add at least one assertion on the array itself (e.g. np.allclose(gau2[N//2], target_row) or peak location/centroid checks)."
+    },
+    {
+      "step_number": "28.3",
+      "defect_type": "D3",
+      "severity": "minor",
+      "confidence": "medium",
+      "evidence": "Docstrings/problem_io declare z, L1, s, R0 'in meters' but all 28.2/28.3 test inputs are in mm (comments: 'Wavelength in mm', 'Distance in mm'). Within 28.3's mm system the test passes L = 16*10**-3, i.e. 16 um - a sampling window 4x SMALLER than the 65-um focal waist (copy-paste of step 1's meter-valued L=16mm without unit conversion). Consequence: the 'focal intensity' target is a nearly flat array (all values in [0.9698, 1.0]) over a physically meaningless window, and a unit-aware solver who 'fixes' L to 16 (mm) fails catastrophically (verified: array becomes ~0 off-center). Pure parameter pass-through reproduces the target, so most solvers are unaffected; the math is unit-agnostic except for this one inconsistent input baked into the frozen target.",
+      "suggested_fix": "Make the test inputs unit-consistent (L = 16 in mm, or convert all lengths to meters) and re-freeze; fix the '(in meters)' docstrings to '(in mm)' or drop units."
+    },
+    {
+      "step_number": "28.1",
+      "defect_type": "D10",
+      "severity": "minor",
+      "confidence": "high",
+      "evidence": "Background formula is corrupted: \"e^{-i{k[z+(x^2+y^2)/2R(z)] arctan(z/f)}}\" multiplies the propagation phase by the Gouy term; the correct expression subtracts it: k[z+r^2/2R(z)] - arctan(z/f). Also \"At z=+-f, omega(+-f)=2*sqrt(omega0)\" should be sqrt(2)*omega0. Neither error can change scores here (only |E| is graded, phase and that identity are irrelevant), but the background actively teaches a wrong equation.",
+      "suggested_fix": "Fix the Gouy-phase sign/placement and the omega(+-f)=sqrt(2)*omega0 typo in step_background."
+    }
+  ],
+  "overall_assessment": "Unscoreable as published: the simps import (D12) zeroes all three steps before any solver code runs. Worse, fixing the import is not enough - each step hides a convention the prompt either omits or actively mis-states: 28.1 requires the authors' df=1/L FFT spacing (the standard self-consistent fftfreq(N+1, L/N) fails all tests) and unit-peak normalization of an explicitly 'constant c'; 28.2's docstring describes a geometry ('z measured from the lens', a phantom second element) that scores 0/3, while the targets encode waist-at-s/lens-at-L1 absolute coordinates; 28.3 labels an amplitude map 'Intensity', failing any solver who squares the field. The problem needs docstring rewrites (28.2 geometry, 28.3 'Intensity'), a stated discretization for 28.1, and the dependency fix before it can fairly score anyone."
+}
