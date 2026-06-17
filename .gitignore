@@ -34,7 +34,9 @@ out_pro2.txt
 /test_one.py
 
 # ---- local agent / editor / python caches ----
-/.claude/
+# ignore local Claude state, but keep project skills under version control
+/.claude/*
+!/.claude/skills/
 __pycache__/
 *.pyc
 .DS_Store
