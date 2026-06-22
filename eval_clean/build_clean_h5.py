@@ -96,9 +96,35 @@ with h5py.File(OUT, 'a') as f:
         nvars = len([k for k in f[f'{step}/test1'].keys()])
         for idx, val in sorted(patches[step].items()):
             write_test(f, step, idx + 1, val, nvars)
-    # transform-spec patches (28.3: var3 -> var3**2), applied against the copied-in original arrays
+    # transform-spec patches, applied against the copied-in original arrays
     for step in sorted(transforms, key=skey):
         spec = transforms[step]
+
+        # --- 8.1: regenerate (T, filtered_image) with a STRICT cross-band boundary ---
+        if spec.get('_type') == 'cshband_pass_strict':
+            from numpy.fft import fft2, ifft2, fftshift, ifftshift
+            tests = spec['tests']
+            for i, tc in enumerate(tests):
+                mat = np.array(tc['matrix'], dtype=float)
+                ty, tx = tc['tile']
+                img = np.tile(mat, (ty, tx))
+                bw = tc['bandwidth']
+                m, n = img.shape
+                u = np.arange(n) - n // 2
+                v = np.arange(m) - m // 2
+                U, V = np.meshgrid(u, v)
+                T = ((np.abs(U) > bw) & (np.abs(V) > bw)).astype(float)
+                filt = np.real(ifft2(ifftshift(fftshift(fft2(img)) * T)))
+                gp = f'{step}/test{i+1}'
+                if gp in f:
+                    del f[gp]
+                g = f.create_group(gp)
+                g.create_dataset('var1', data=T)
+                g.create_dataset('var2', data=filt)
+            print(f'  transform {step}: regenerated {len(tests)} tests with strict cross-band boundary (>)')
+            continue
+
+        # --- 28.3 legacy: var3 -> var3**2 ---
         squared = 0
         for t in sorted([k for k in f[step] if k.startswith('test')], key=lambda t: int(t[4:])):
             g = f[f'{step}/{t}']

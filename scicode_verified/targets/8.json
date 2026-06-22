@@ -1,0 +1,16 @@
+{
+ "problem_id": "8",
+ "targets": {
+  "8.1": {
+   "_transform": "Regenerate 8.1 test1/2/3 (T, filtered_image) with a STRICT boundary: T = (|kx| > bandwidth) & (|ky| > bandwidth) in the zero-frequency-centered layout (the original gold used an inclusive >= boundary). filtered_image = real(ifft2(ifftshift(fftshift(fft2(image)) * T))). test4 (a bool) is unchanged and copied from the original h5.",
+   "_type": "cshband_pass_strict",
+   "tests": [
+    {"matrix": [[1, 0, 0, 0], [0, 0, 0, 1]], "tile": [400, 200], "bandwidth": 40},
+    {"matrix": [[1, 0, 1, 0], [1, 0, 1, 0]], "tile": [400, 200], "bandwidth": 40},
+    {"matrix": [[1, 0, 1, 0], [1, 0, 1, 0]], "tile": [400, 200], "bandwidth": 20}
+   ]
+  }
+ },
+ "note": "Spec-vs-gold defect. The prompt states 'The filter masks should not include the bandwidth frequency', which cleanly specifies a STRICT boundary (under >, the whole |kx|=bandwidth / |ky|=bandwidth cross-line is removed, so the mask truly excludes the bandwidth frequency). The original gold was generated with an INCLUSIVE >= boundary, contradicting the prompt: it keeps the bandwidth-frequency line at the corners, so a correct, instruction-following solution (e.g. deepseek-v4-pro, which used >) was marked wrong on only the ~0.45% boundary cross-lines (2880/640000 px at bw=40). Fix by regenerating the gold with strict > so target == prompt; prompt left unchanged. NOTE: flash's failure on 8.1 is a SEPARATE genuine model error (it kept the low-frequency cross via |u|<bw OR |v|<bw instead of removing it) and remains a fail.",
+ "_rounds": ["r4"]
+}
