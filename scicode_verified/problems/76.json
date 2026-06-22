@@ -21,8 +21,8 @@
   },
   {
    "step_number": "76.2",
-   "step_description_prompt": "Compute the Kullback–Leibler divergence assuming the background distribution is uniform (A,T,C,G appears with equal probability) given a PWM Use the natural logarithm (ln).",
-   "step_background": "Background\nUsage of this method in similar applications can be found in\n\nAkhter, S., Aziz, R. K., Kashef, M. T., Ibrahim, E. S., Bailey, B., & Edwards, R. A. (2013). Kullback-Leibler divergence in complete bacterial and phage genomes. Nucleic Acids Research, 41(8), e84.\n\nDas, M. K., & Dai, H. K. (2007). A survey of DNA motif finding algorithms. BMC Bioinformatics, 8(Suppl 7), S21.\n\nKL divergence is a relative entropy between two discrete distributions (in our case, P is the PWM's probability distribution, and Q is the uniform distribution)\n\n$$\nD_{KL}(P||Q) = \\sum_{x\\in \\text{Sample Space}}P(x) \\ln \\frac{P(x)}{Q(x)}\n$$\n\nUse the natural logarithm (ln); the result is in nats.",
+   "step_description_prompt": "Compute the Kullback–Leibler divergence assuming the background distribution is uniform (A,T,C,G appears with equal probability) given a PWM",
+   "step_background": "Background\nUsage of this method in similar applications can be found in\n\nAkhter, S., Aziz, R. K., Kashef, M. T., Ibrahim, E. S., Bailey, B., & Edwards, R. A. (2013). Kullback-Leibler divergence in complete bacterial and phage genomes. Nucleic Acids Research, 41(8), e84.\n\nDas, M. K., & Dai, H. K. (2007). A survey of DNA motif finding algorithms. BMC Bioinformatics, 8(Suppl 7), S21.\n\nKL divergence is a relative entropy between two discrete distributions (in our case, P is the PWM's probability distribution, and Q is the uniform distribution)\n\n$$\nD_{KL}(P||Q) = \\sum_{x\\in \\text{Sample Space}}P(x) \\ln \\frac{P(x)}{Q(x)}\n$$",
    "ground_truth_code": null,
    "function_header": "def compute_kld(matrix):\n    '''Input:\n    (number of row of PWM matrix, 4) array, PWM\n    Output:\n    Kullback-Leibler divergence (float)\n    '''",
    "test_cases": [

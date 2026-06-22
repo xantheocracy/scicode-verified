@@ -1,0 +1,15 @@
+{
+ "problem_id": "46",
+ "46.3": {
+  "0": true,
+  "1": true
+ },
+ "note": "46 REDESIGN (seeded-MC -> statistical, target-touching). 46.3 metropolis is now ONE sweep (no nsteps); its background drops the RNG-protocol block + the u<a parenthetical. Tests time-average <r> over many sweeps and assert |<r> - 3/(2*alpha)| < 0.02 (analytic <r> for |psi|^2 = exp(-2 alpha r) per electron). Verified seed/protocol-robust (a+u>1 and u<a both pass; dev <= 7e-4 vs tol 0.02). [46.3 + 46.4 landed.] 46.4 calc_energy now drives the metropolis sweeps and TIME-AVERAGES the three local energies (kinetic, e-i, e-e) with a blocking error; the old 'evaluate only on final configs / ddof=0 / do-not-average-the-chain' pins (forced by the exact tests) are removed. Tests assert each component lies within 3*error of its analytic value (<T>=alpha^2, <V_ei>=-4 alpha, <V_ee>=5 alpha/8; Z=2); verified all three within 3 sigma with margin.",
+ "_rounds": [
+  "R3"
+ ],
+ "46.4": {
+  "0": true,
+  "1": true
+ }
+}

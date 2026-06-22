@@ -21,7 +21,7 @@
   },
   {
    "step_number": "35.2",
-   "step_description_prompt": "Provide a function that takes in three positive numbers x,y,z and return an array of smallest quadratic combinations of the three numbers (up to N numbers). To be specific, $i^2x+j^2y+k^2z$ is defined as a valid quadratic combinations, where the coefficients i,j,k are at least 1 (i.e. i,j,k are positive integers >= 1). The output should be in ascending order.",
+   "step_description_prompt": "Provide a function that takes in three positive numbers x,y,z and return an array of smallest quadratic combinations of the three numbers (up to N numbers). To be specific, $i^2x+j^2y+k^2z$ is defined as a valid quadratic combinations, where the coefficients i,j,k are positive integers. The output should be in ascending order.",
    "step_background": "Background\n\nThis is an algorithm question, which can be decomposed into the following steps.\nGet enough amount of the positive quadratic combinations of the input three numbers.\n2. Sort the combinations.\n3. Get the first N smallest combinations and output them as an array.",
    "ground_truth_code": null,
    "function_header": "def generate_quadratic_combinations(x, y, z, N):\n    '''With three numbers given, return an array with the size N that contains the smallest N numbers which are quadratic combinations of the input numbers.\n    Input:\n    x (float): The first number.\n    y (float): The second number.\n    z (float): The third number.\n    N (int): The number of smallest quadratic combinations to return.\n    Output:\n    C (size N numpy array): The collection of the quadratic combinations.\n    '''",

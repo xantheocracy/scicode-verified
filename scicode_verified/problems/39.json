@@ -21,10 +21,10 @@
   },
   {
    "step_number": "39.2",
-   "step_description_prompt": "Provide a function that calculates the pseudo-angle $\\theta$, given the propagate matrix of multiple DBR stacks as $\\mathbf{M}=\\left[\\begin{array}{ll}A & B \\\\ C & D\\end{array}\\right]$. Let $x = (A + D)/2$. If $|x| > 1$, return $\\theta = \\pi + i\\,\\mathrm{arccosh}(|x|)$ (its real part is $\\pi$ and its imaginary part is $\\mathrm{arccosh}(|x|)$); otherwise return $\\theta = \\arccos(x)$ using numpy's principal branch.",
-   "step_background": "Background\n$\\theta$ comes from the matrix elements that\n\n$$\\cos \\theta=(A+D) / 2$$\n\nHowever, When $|(A+D) / 2|>1$, the solution for $\\theta$ becomes complex\n$$\n\\theta=m \\pi+i \\alpha\n$$\nwhere $m$ is assumed to be 1 for simplicity.",
+   "step_description_prompt": "Provide a function that calculates the pseudo-angle $\\theta$ from the propagate matrix $\\mathbf{M}=\\left[\\begin{array}{ll}A & B \\\\ C & D\\end{array}\\right]$ of the DBR stack, defined by $\\cos\\theta = (A+D)/2$. With $x = (A+D)/2$, return $\\theta = \\arccos(x)$ on numpy's principal branch; $x$ is complex, so when $|x|>1$ the returned $\\theta$ is complex (and still satisfies $\\cos\\theta = x$).",
+   "step_background": "Background\n$\\theta$ comes from the matrix elements that\n\n$$\\cos \\theta=(A+D) / 2$$\n\nWhen $|(A+D)/2|>1$, the solution for $\\theta$ becomes complex.",
    "ground_truth_code": null,
-   "function_header": "def get_theta(A, D):\n    '''Calculates the angle theta used in the calculation of the transmission coefficient.\n    Let x = (A + D)/2. If abs(x) > 1, theta = np.pi + 1j*np.arccosh(abs(x)); otherwise theta = np.arccos(x).\n    Input:\n    A (complex): Matrix factor from the calculation of phase shift and matrix factors.\n    D (complex): Matrix factor from the calculation of phase shift and matrix factors.\n    Output:\n    theta (complex): Angle used in the calculation of the transmission coefficient.\n    '''",
+   "function_header": "def get_theta(A, D):\n    '''Calculates the angle theta used in the calculation of the transmission coefficient.\n    Input:\n    A (complex): Matrix factor from the calculation of phase shift and matrix factors.\n    D (complex): Matrix factor from the calculation of phase shift and matrix factors.\n    Output:\n    theta (complex): Angle used in the calculation of the transmission coefficient.\n    '''",
    "test_cases": [
     "assert np.allclose(get_theta(1+1j, 2-1j), target)",
     "assert np.allclose(get_theta(1, 2j), target)",

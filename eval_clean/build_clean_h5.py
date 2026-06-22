@@ -73,6 +73,18 @@ def write_test(f, step, testno, value, nvars):
         g.create_dataset(f'var{i+1}', data=np.array(c))
 
 
+# --- per-step test_cases counts from the SSOT (to trim orphan h5 targets) ---
+PROB_DIR = os.path.join(ROOT, 'scicode_verified', 'problems')
+SKIP_STEPS = {'13.6', '62.1', '76.3'}
+step_ntc = {}
+if os.path.isdir(PROB_DIR):
+    for fn in os.listdir(PROB_DIR):
+        if not fn.endswith('.json'):
+            continue
+        d = json.load(open(os.path.join(PROB_DIR, fn)))
+        for s in d.get('sub_steps', []):
+            step_ntc[str(s.get('step_number'))] = len(s.get('test_cases') or [])
+
 shutil.copy(SRC, OUT)
 print(f"SRC     = {SRC}")
 print(f"TARGETS = {TARGETS}")
@@ -99,6 +111,21 @@ with h5py.File(OUT, 'a') as f:
             got = [float(np.asarray(f[f'{step}/test{i+1}/var3'][()]).flat[0]) for i in range(len(exp))]
             assert all(abs(a - b) < 1e-9 for a, b in zip(got, exp)), f'{step} corner mismatch: {got} != {exp}'
         print(f'  transform {step}: squared Intensity in {squared} tests (corner-check OK)')
+
+    # --- trim orphan tests: h5 must not have more test{N} than the SSOT has test_cases ---
+    trimmed = []
+    for sn, ntc in sorted(step_ntc.items(), key=lambda kv: skey(kv[0])):
+        if sn in SKIP_STEPS or sn not in f:
+            continue
+        h5tests = sorted((k for k in f[sn] if k.startswith('test')), key=lambda x: int(x[4:]))
+        if len(h5tests) < ntc:
+            print(f'  WARNING: {sn} has {len(h5tests)} h5 targets but {ntc} test_cases (MISSING target!)')
+        for t in h5tests:
+            if int(t[4:]) > ntc:
+                del f[f'{sn}/{t}']
+                trimmed.append(f'{sn}/{t}')
+    if trimmed:
+        print(f'  trimmed {len(trimmed)} orphan test target(s): {", ".join(trimmed)}')
 
 print(f'wrote {OUT} with {len(patches)} patched steps and {len(transforms)} transform steps')
 

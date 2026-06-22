@@ -64,9 +64,9 @@
   {
    "step_number": "72.5",
    "step_description_prompt": "Considering a periodic Ising 2D `lattice` of values 1 or -1, write a Python function that returns the acceptance probability and magnetization difference due to a spin flip at site `(i, j)` given the inverse temperature `beta`.",
-   "step_background": "Background\nAt temperature $T$, the partition function is\n\n\\begin{align}\nZ = \\sum_c \\exp[-\\beta H(c)],\n\\end{align}\n\nwhere $\\beta = 1/T$ and $H(c)$ is the energy for a spin configuration $c$.\n\nThe probability distribution is\n\n\\begin{align}\n\\Pi(c) &= \\frac{\\exp[-\\beta H(c)]}{Z}.\n\\end{align}\n\nWe move the configuration $c$ to $c^{\\prime}$ with some probability $T( c \\rightarrow c^{\\prime})$. In our case, we flip a random spin, so $T( c \\rightarrow c^{\\prime}) = T( c^{\\prime} \\rightarrow c) = 1/N$. Thus, we accept the move with the probability\n\n\\begin{align}\nA(c \\rightarrow c^{\\prime}) \n&= \\min \\left[1, \\frac{\\Pi(c^{\\prime})}{\\Pi(c)} \\frac{T(c^{\\prime} \\rightarrow c)}{T(c \\rightarrow c^{\\prime})} \\right] \\\\\n&= \\min [1, \\exp(-\\beta (H(c^{\\prime}) - H(c)))]\n\\end{align}\n\nNote: `get_flip_probability_magnetization` returns the **raw** Boltzmann ratio $\\exp(-\\beta\\,(H(c^{\\prime})-H(c)))$ (uncapped, NOT the min); the cap at 1 is applied implicitly in the next step by the acceptance comparison $u < A$ (any $A \\ge 1$ is always accepted).",
+   "step_background": "Background\nAt temperature $T$, the partition function is\n\n\\begin{align}\nZ = \\sum_c \\exp[-\\beta H(c)],\n\\end{align}\n\nwhere $\\beta = 1/T$ and $H(c)$ is the energy for a spin configuration $c$.\n\nThe probability distribution is\n\n\\begin{align}\n\\Pi(c) &= \\frac{\\exp[-\\beta H(c)]}{Z}.\n\\end{align}\n\nWe move the configuration $c$ to $c^{\\prime}$ with some probability $T( c \\rightarrow c^{\\prime})$. In our case, we flip a random spin, so $T( c \\rightarrow c^{\\prime}) = T( c^{\\prime} \\rightarrow c) = 1/N$. Thus, we accept the move with the probability\n\n\\begin{align}\nA(c \\rightarrow c^{\\prime}) \n&= \\min \\left[1, \\frac{\\Pi(c^{\\prime})}{\\Pi(c)} \\frac{T(c^{\\prime} \\rightarrow c)}{T(c \\rightarrow c^{\\prime})} \\right] \\\\\n&= \\min [1, \\exp(-\\beta (H(c^{\\prime}) - H(c)))]\n\\end{align}",
    "ground_truth_code": null,
-   "function_header": "def get_flip_probability_magnetization(lattice, i, j, beta):\n    '''Calculate spin flip probability and change in total magnetization.\n    Args:\n        lat (np.array): shape (N, N), 2D lattice of 1 and -1\n        i (int): site index along x\n        j (int): site index along y\n        beta (float): inverse temperature\n    Return:\n        A (float): the RAW (uncapped) Boltzmann acceptance ratio exp(-beta*(H(c_new)-H(c_old))); NOT capped at 1\n        dM (int): change in magnetization after the spin flip\n    '''",
+   "function_header": "def get_flip_probability_magnetization(lattice, i, j, beta):\n    '''Calculate spin flip probability and change in total magnetization.\n    Args:\n        lat (np.array): shape (N, N), 2D lattice of 1 and -1\n        i (int): site index along x\n        j (int): site index along y\n        beta (float): inverse temperature\n    Return:\n        A (float): the Metropolis acceptance probability\n        dM (int): change in magnetization after the spin flip\n    '''",
    "test_cases": [
     "lattice = np.array([[ 1, -1,  1,  1],[-1, -1,  1,  1],[-1, -1,  1,  1],[ 1, -1, -1, -1]])\nassert np.allclose(get_flip_probability_magnetization(lattice, 1, 2, 1), target)",
     "lattice = np.array([[ 1, -1,  1,  1],[-1, -1,  -1,  1],[-1, -1,  1,  1],[ 1, -1, -1, -1]])\nassert np.allclose(get_flip_probability_magnetization(lattice, 1, 2, 1), target)",
@@ -77,40 +77,32 @@
   },
   {
    "step_number": "72.6",
-   "step_description_prompt": "Write a Python function that goes through each spin in a 2D lattice, flips the spin and accepts the move (flip) if a uniform random number is less than the acceptance probability given by `get_flip_probability_magnetization()` Iterate over the sites in row-major order (i in range(N) as the outer loop, j in range(N) as the inner loop); for EVERY site draw exactly one uniform number u = np.random.random() and flip the spin if u < A (the raw acceptance ratio from get_flip_probability_magnetization), regardless of whether A >= 1 (do not short-circuit).",
+   "step_description_prompt": "Write a Python function that performs one Metropolis sweep over the 2D `spins` lattice: visit each spin, propose flipping it, and accept the flip when a uniform random number is below the acceptance probability A returned by `get_flip_probability_magnetization()`. Return the updated lattice.",
    "step_background": "",
    "ground_truth_code": null,
    "function_header": "def flip(spins, beta):\n    '''Goes through each spin in the 2D lattice and flip it.\n    Args:\n        spins (np.array): shape (N, N), 2D lattice of 1 and -1        \n        beta (float): inverse temperature\n    Return:\n        lattice (np.array): final spin configurations\n    '''",
-   "test_cases": [
-    "np.random.seed(0)\nspins = np.array([[ 1, -1,  1,  1],[-1, -1,  1,  1],[-1, -1,  1,  1],[ 1, -1, -1, -1]])\nassert np.allclose(flip(spins, 1), target)",
-    "np.random.seed(1)\nspins = np.array([[ 1, -1,  1,  1],[-1, -1,  -1,  1],[-1, -1,  1,  1],[ 1, -1, -1, -1]])\nassert np.allclose(flip(spins, 1), target)",
-    "np.random.seed(2)\nspins = np.array([[ 1, -1,  1,  1],[-1, -1,  1,  -1],[-1, -1,  1,  1],[ 1, -1, -1, -1]])\nassert np.allclose(flip(spins, 1), target)"
-   ],
+   "test_cases": [],
    "return_line": "    return lattice"
   },
   {
    "step_number": "72.7",
-   "step_description_prompt": "Write a Python function that performs Metropolis algorithm to flip spins for `nsweeps` times and collects magnetization^2 / N^4. Inputs are temperature, N, nsweeps Initialize the lattice with lattice = np.random.choice([-1, 1], (N, N)); then perform nsweeps sweeps (each sweep is one call to flip), and after each sweep append magnetization(lattice)**2 / N**4 to the returned array.",
+   "step_description_prompt": "Write a Python function that runs the Metropolis Ising simulation at temperature `T` on an N x N lattice. Initialise a random spin configuration, thermalise it with `n_equil` burn-in sweeps (each sweep is one call to `flip`), then run `n_measure` further sweeps, recording magnetization^2 / N^4 after each measurement sweep. Return the array of these per-sweep measurements.",
    "step_background": "",
    "ground_truth_code": null,
-   "function_header": "def run(T, N, nsweeps):\n    '''Performs Metropolis to flip spins for nsweeps times and collect iteration, temperature, energy, and magnetization^2 in a dataframe\n    Args: \n        T (float): temperature\n        N (int): system size along an axis\n        nsweeps: number of iterations to go over all spins\n    Return:\n        mag2: (numpy array) magnetization^2 / N^4 after each sweep\n    '''",
+   "function_header": "def run(T, N, n_equil, n_measure):\n    '''Run the Metropolis Ising simulation: thermalise, then measure.\n    Args:\n        T (float): temperature\n        N (int): system size along an axis\n        n_equil (int): number of burn-in sweeps to discard before measuring\n        n_measure (int): number of measurement sweeps\n    Return:\n        mag2 (np.array): magnetization^2 / N^4 recorded after each of the n_measure sweeps\n    '''",
    "test_cases": [
-    "np.random.seed(0)\nassert np.allclose(run(1.6, 3, 10), target)",
-    "np.random.seed(0)\nassert np.allclose(run(2.1, 3, 10), target)",
-    "np.random.seed(0)\nassert np.allclose(run(3.0, 3, 10), target)"
+    "np.random.seed(0)\nm2 = run(1.5, 10, 300, 1000)\nnb = 20\nx = np.asarray(m2)\nk = (len(x) // nb) * nb\nerr = x[:k].reshape(nb, -1).mean(1).std(ddof=1) / np.sqrt(nb)\nassert (abs(np.mean(m2) - 0.9737) < 3 * err) == target"
    ],
    "return_line": "    return mag2"
   },
   {
    "step_number": "72.8",
-   "step_description_prompt": "Write a Python that runs the Ising model for a given list of `temperatures`, `N`, and `nsweeps` returns a list of magnetization^2/N^4 at each temperature. For each temperature T, call run(T, N, nsweeps) (continuing the same global RNG stream) and record np.mean over the FULL returned per-sweep array (do not discard any burn-in sweeps).",
+   "step_description_prompt": "Write a Python function that runs the Ising simulation over a list of temperatures `Ts` on an N x N lattice, using `n_equil` burn-in sweeps and `n_measure` measurement sweeps at each temperature. For each temperature, call `run` and record the mean of its per-sweep magnetization^2 / N^4. Return the list of these per-temperature means.",
    "step_background": "",
    "ground_truth_code": null,
-   "function_header": "def scan_T(Ts, N, nsweeps):\n    '''Run over several given temperatures.\n    Args:\n        Ts: list of temperature\n        N: system size in one axis\n        nsweeps: number of iterations to go over all spins\n    Return:\n        mag2_avg: list of magnetization^2 / N^4, each element is the value for each temperature\n    '''",
+   "function_header": "def scan_T(Ts, N, n_equil, n_measure):\n    '''Run the Ising model over several temperatures.\n    Args:\n        Ts: list of temperatures\n        N: system size in one axis\n        n_equil (int): number of burn-in sweeps per temperature\n        n_measure (int): number of measurement sweeps per temperature\n    Return:\n        mag2_avg: list of mean magnetization^2 / N^4, one per temperature\n    '''",
    "test_cases": [
-    "np.random.seed(0)\nassert np.allclose(scan_T(Ts=[1.6, 2.10, 2.15, 2.20, 2.25, 2.30, 2.35, 2.40, 2.8], N=10, nsweeps=10), target)",
-    "np.random.seed(0)\nassert np.allclose(scan_T(Ts=[1.6, 2.10, 2.15, 2.20, 2.25, 2.30, 2.35, 2.40, 2.8], N=20, nsweeps=10), target)",
-    "np.random.seed(0)\nassert np.allclose(scan_T(Ts=[1.6, 2.10, 2.15, 2.20, 2.25, 2.30, 2.35, 2.40, 2.8], N=30, nsweeps=10), target)"
+    "np.random.seed(0)\nTs = [1.6, 2.10, 2.15, 2.20, 2.25, 2.30, 2.35, 2.40, 2.8]\nmag2 = scan_T(Ts, 10, 200, 200)\nok = (mag2[0] > 0.85) and (mag2[-1] < 0.40) and (mag2[0] - mag2[-1] > 0.5) and (mag2[0] == max(mag2))\nassert ok == target"
    ],
    "return_line": "    return mag2_avg"
   },
@@ -121,10 +113,8 @@
    "ground_truth_code": null,
    "function_header": "def calc_transition(T_list, mag2_list):\n    '''Calculates the transition temperature by taking derivative\n    Args:\n        T_list: list of temperatures\n        mag2_list: list of magnetization^2/N^4 at each temperature\n    Return:\n        float: Transition temperature\n    '''",
    "test_cases": [
-    "np.random.seed(0)\nTs = [1.6, 2.10, 2.15, 2.20, 2.25, 2.30, 2.35, 2.40, 2.8]\nmag2 = scan_T(Ts=Ts, N=5, nsweeps=100)\nassert np.allclose(calc_transition(Ts, mag2), target)",
-    "np.random.seed(0)\nTs = [1.6, 2.10, 2.15, 2.20, 2.25, 2.30, 2.35, 2.40, 2.8]\nmag2 = scan_T(Ts=Ts, N=10, nsweeps=100)\nassert np.allclose(calc_transition(Ts, mag2), target)",
-    "np.random.seed(0)\nTs = [1.6, 2.10, 2.15, 2.20, 2.25, 2.30, 2.35, 2.40, 2.8]\nmag2 = scan_T(Ts=Ts, N=20, nsweeps=100)\nassert np.allclose(calc_transition(Ts, mag2), target)",
-    "np.random.seed(0)\nTs = [1.6, 2.10, 2.15, 2.20, 2.25, 2.30, 2.35, 2.40, 2.8]\nmag2 = scan_T(Ts=Ts, N=30, nsweeps=2000)\nT_transition = calc_transition(Ts, mag2)\nassert (np.abs(T_transition - 2.269) < 0.2) == target"
+    "T_list = [1.0, 2.0, 3.0, 4.0]\nmag2_list = [1.0, 1.0, 0.2, 0.1]\nassert (abs(calc_transition(T_list, mag2_list) - 2.0) < 1e-9) == target",
+    "np.random.seed(0)\nTs = [1.6, 2.10, 2.15, 2.20, 2.25, 2.30, 2.35, 2.40, 2.8]\nmag2 = scan_T(Ts, 16, 500, 500)\nassert (abs(calc_transition(Ts, mag2) - 2.26919) < 0.2) == target"
    ],
    "return_line": "    return T_transition"
   }

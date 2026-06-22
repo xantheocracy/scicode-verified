@@ -21,7 +21,7 @@
   },
   {
    "step_number": "24.2",
-   "step_description_prompt": "Write a function to implement global the Lax-Friedrich numerical flux, which should take left and right cell averaged values as inputs and output the value of flux as a float. Using maximum wave speed as the global Lax-Friedrichs stability parameter, $\\alpha_{LF}$. For this problem use the fixed global value $\\alpha_{LF}=2$, i.e. the maximum wave speed $\\max|u|$ over the initial-condition range $u\\in[-2,2]$ (it is a single global constant, not recomputed per cell from the local inputs).",
+   "step_description_prompt": "Write a function to implement global the Lax-Friedrich numerical flux, which should take left and right cell averaged values as inputs and output the value of flux as a float. Using maximum wave speed as the global Lax-Friedrichs stability parameter, $\\alpha_{LF}$.",
    "step_background": "Background:\nThis Lax-Fridrich numerical flux approximates the flux across a cell edge using the averaged value from the left and right cells.\n\n\\begin{equation}\nLF = \\frac{1}{2} (f(u_L) + f(u_R) - \\alpha_{LF}\\times (u_R-u_L))\n\\end{equation}\nwhere the global Lax-Fridrich stabilization term $\\alpha_{LF}$ is defined as:\n\\begin{equation*}\n\\alpha_{LF} = \\text{max}||\\frac{\\partial (u^2/2)}{\\partial u}|| = max||u|| = 2\n\\end{equation*}\n$u_R$ and $u_L$ are cell averaged values on the right and left side of the vertex.",
    "ground_truth_code": null,
    "function_header": "def LaxF(uL, uR):\n    '''This function computes Lax-Fridrich numerical flux.\n    Inputs: \n    uL : Cell averaged value at cell i, float\n    uR : Cell averaged value at cell i+1, float\n    Output: flux, float\n    '''",

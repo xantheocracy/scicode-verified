@@ -21,7 +21,7 @@
   },
   {
    "step_number": "17.2",
-   "step_description_prompt": "Write a function to perform DOS integration within a single tetrahedron. Consider the different scenarios where the magnitude of energy $E$ on the iso-value surface compares to the energies $\\varepsilon_i$ at the vertices. Assume the tetrahedron and Brillouin-zone volumes are equal (Omega_T = Omega_BZ), so the prefactor 6*Omega_T/Omega_BZ in the DOS formula equals 6.",
+   "step_description_prompt": "Write a function to perform DOS integration within a single tetrahedron. Consider the different scenarios where the magnitude of energy $E$ on the iso-value surface compares to the energies $\\varepsilon_i$ at the vertices. Adopt the convention that the tetrahedron volume equals the Brillouin-zone volume and the overall DOS normalization prefactor is 6.",
    "step_background": "Background\n\nIso-surface integral\nFor different values of the energy E, the shapes of the iso-value surfaces intersected with the tetrahedron are different. Write codes to express the results of the surface integration using $\\varepsilon_0 = E, \\varepsilon_1, \\varepsilon_2, \\varepsilon_3, \\varepsilon_4$ and $\\varepsilon_{ji} = \\varepsilon_j - \\varepsilon_i$.\n\n",
    "ground_truth_code": null,
    "function_header": "def integrate_DOS(energy, energy_vertices):\n    '''Input:\n    energy: a float number representing the energy value at which the density of states will be integrated\n    energy_vertices: a list of float numbers representing the energy values at the four vertices of a tetrahedron when implementing the linear tetrahedron method\n    Output:\n    result: a float number representing the integration results of the density of states\n    '''",

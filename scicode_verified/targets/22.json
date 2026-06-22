@@ -1,26 +1,61 @@
 {
  "problem_id": "22",
- "22.3": {
-  "1": {
-   "__complex__": [
-    -0.15254479680485528,
-    0.15254479680485547
-   ]
-  },
-  "2": {
-   "__complex__": [
-    -0.14447758329891075,
-    0.28895516659782183
-   ]
-  },
+ "note": "22.2 ROTATION-COEFFICIENT SIGN BUG fixed (R3, full-scope): the recurrence's last term sign was wrong (-2(Q31+iQ32) -> +2). The shipped T was non-unitary and violated the defining identity Y_n^m(d)=sum_v T_n^{vm} Y_n^v(Q.d) under every harmonic convention; the correct unitary Wigner rotation coefficient = the flipped values, verified by 2 independent methods x2 agents (quadrature projection + sympy Wigner-D) to ~1e-14, and the flipped n-increasing recurrence reproduces the closed-form Wigner-D to 1e-14 for general Q (n<=7). Re-froze 22.2 test1/2/4/5/6/7 to the physical values (test3 m=0 unchanged). Also pinned the CS-free Legendre convention in the background. 22.3 re-freeze (in-plane conjugates + off-plane test) follows once the off-plane sign tie-break is locked. Detail: ledger/BUG_22_rotation_sign.md. | (superseded earlier note: the old 22.2 test4-7 targets were computed from the WRONG -2 recurrence and are now replaced.) | 22.3 RE-FREEZE (R3): with the corrected 22.2 (flipped sign) the contraction (formula A) equals the physical field-projection oracle to ~1e-15 for all cases; the OLD frozen 22.3 in-plane targets were the complex CONJUGATE of the physically-correct GD-convention values (the original 22.3 output used the conjugate phi-convention, self-consistent only with the WRONG 22.2). Re-froze test2/3/4 to their conjugates (test1 real, unchanged), corrected the r1 test4 patch (-0.1553j was also the conjugate -> +0.1553j), and ADDED an off-plane test5 r0=[0.3,0.4,0.5] -> -0.0882318+0.1176424j (the only test that exposes this conjugate/sign class; in-plane z=0 hides it). 22.3 formula/prompt/background unchanged.",
+ "22.2": {
+  "0": -0.5,
+  "1": -0.33071891388307445,
   "3": {
    "__complex__": [
-    -9.509991907974191e-18,
-    0.15530995409607762
+    -0.15553096772612052,
+    0.24222513055971262
+   ]
+  },
+  "4": {
+   "__complex__": [
+    -0.004170870499078049,
+    0.3366424819601227
+   ]
+  },
+  "5": {
+   "__complex__": [
+    -0.23010797435236913,
+    0.32756479548480727
+   ]
+  },
+  "6": {
+   "__complex__": [
+    0.1649896641056365,
+    0.10884872539543267
    ]
   }
  },
  "_rounds": [
-  "r1"
- ]
+  "R3"
+ ],
+ "22.3": {
+  "1": {
+   "__complex__": [
+    -0.1525447968048546,
+    0.1525447968048546
+   ]
+  },
+  "2": {
+   "__complex__": [
+    -0.14447758329891006,
+    0.28895516659782006
+   ]
+  },
+  "3": {
+   "__complex__": [
+    2.588956115708687e-19,
+    0.1553099540960766
+   ]
+  },
+  "4": {
+   "__complex__": [
+    -0.08823177618755645,
+    0.11764236825007526
+   ]
+  }
+ }
 }

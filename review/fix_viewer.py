@@ -407,6 +407,55 @@ def _reasons_html(pid, step, field):
     return "".join(out)
 
 
+_PROB_CTX_FIELDS = [
+    ("problem_description_main", "题面 (problem_description_main · 顶层)", True),
+    ("problem_background_main", "背景 (problem_background_main · 顶层)", True),
+    ("problem_io", "题目 I/O (problem_io · 顶层)", False),
+    ("required_dependencies", "依赖 (required_dependencies · 顶层)", False),
+]
+
+
+def _ctx_box(label, val, prose, changed):
+    """One field rendered in full (cleaned value); prose -> MathJax, code -> mono."""
+    if isinstance(val, list):
+        val = "\n# ---- next test ----\n".join(str(x) for x in val)
+    if val is None:
+        val = ""
+    cls = "ctxbody prose" if prose else "ctxbody nomath code"
+    badge = ' <span class="cbadge">已变更</span>' if changed else ''
+    chcls = " ctxchanged" if changed else ""
+    return (f'<div class="ctxfld{chcls}">'
+            f'<div class="lbl nomath">{html.escape(label)}{badge}</div>'
+            f'<div class="{cls}">{html.escape(val)}</div></div>')
+
+
+def _full_context_html(pid, o, c):
+    """Render the ENTIRE cleaned problem (every field, changed or not) for context."""
+    if not c:
+        return ""
+    o = o or {}
+    out = ['<h3>完整内容 (cleaned · 全部字段，未变更也显示)</h3>']
+    for key, label, prose in _PROB_CTX_FIELDS:
+        val = c.get(key)
+        if val is None or (isinstance(val, str) and not val.strip()):
+            continue
+        changed = _norm(o.get(key)) != _norm(val)
+        out.append(_ctx_box(label, val, prose, changed))
+    o_steps = {s.get("step_number"): s for s in (o.get("sub_steps") or [])}
+    for ss in (c.get("sub_steps") or []):
+        sn = str(ss.get("step_number"))
+        os_ = o_steps.get(ss.get("step_number"), {})
+        out.append(f'<div class="ctxstep"><div class="ctxsteptitle nomath">▼ 步骤 {html.escape(sn)}</div>')
+        for key in _STEP_FIELDS:
+            val = ss.get(key)
+            if val is None or (isinstance(val, str) and not val.strip()) or (isinstance(val, list) and not val):
+                continue
+            changed = _norm(os_.get(key)) != _norm(val)
+            out.append(_ctx_box(_FIELD_LABEL.get(key, key), val, key in _PROSE_FIELDS, changed))
+        out.append('</div>')
+    return "".join(out)
+
+
 def render_problem_html(pid):
     d = get_diff(pid)
     o = _ORIG.get(str(pid))
@@ -429,6 +478,7 @@ def render_problem_html(pid):
         return "".join(parts)
     if not d["changed"]:
         parts.append('<div class=empty>此题清洗前后内容完全一致（无变更）。</div>')
+        parts.append(_full_context_html(pid, o, c))
         return "".join(parts)
 
     tagspans = "".join(f'<span class="tag t-{html.escape(t)}">{html.escape(t)}</span>'
@@ -484,6 +534,7 @@ def render_problem_html(pid):
         parts.append(_reasons_html(pid, str(tc["step"]), "target"))
         parts.append('</div>')
 
+    parts.append(_full_context_html(pid, o, c))
     return "".join(parts)
 
 
@@ -552,6 +603,16 @@ table.tgt del,table.tgt ins{text-decoration:none;display:block;}
 .n-consistency{background:#e7eefc;color:#3556a8;} .n-target{background:#fde0e0;color:#a00;}
 .n-review{background:#f0e0c0;color:#806000;} .n-nochange{background:#eee;color:#888;}
 .scope{color:#999;font-size:11px;}
+.ctxstep{border:1px solid #e8e8e8;border-radius:6px;margin:10px 0;padding:6px 12px;background:#fcfcfc;}
+.ctxsteptitle{font-size:13px;font-weight:600;color:#333;margin:2px 0 6px;}
+.ctxfld{margin:8px 0;}
+.ctxfld .lbl{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;}
+.ctxbody{white-space:pre-wrap;word-break:break-word;padding:7px 9px;border-radius:5px;font-size:13px;line-height:1.6;border:1px solid #eee;background:#fafafa;}
+.ctxbody.code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;background:#0d1117;color:#c9d1d9;border-color:#222;}
+.ctxbody.prose{font-family:inherit;}
+.ctxchanged>.ctxbody{border-left:3px solid #e8a33a;background:#fffaf0;}
+.ctxchanged>.ctxbody.code{background:#1a160d;border-left-color:#e8a33a;}
+.cbadge{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;background:#e8a33a;color:#fff;margin-left:6px;text-transform:none;letter-spacing:0;}
 </style></head><body><div id=app>
 <div id=side><h1>SciCode 清洗变更 (original → cleaned)</h1>
 <div class=summary id=summary>加载中…</div>
@@ -602,6 +663,20 @@ boot();
 </script></body></html>"""
 
 
+def _reload():
+    """Re-read all source files so a browser refresh shows the latest edits
+    (no server restart needed). Cheap text reads; clears the diff cache."""
+    global _ORIG, _CLEAN, _PATCHES, _LOG
+    _ORIG = _load_jsonl(_ORIG_JSONL)
+    _CLEAN = _load_jsonl(_CLEAN_JSONL)
+    _PATCHES = _load_patches()
+    try:
+        _LOG = json.load(open(_LOG_PATH))
+    except Exception:
+        _LOG = {}
+    _DIFF_CACHE.clear()
+
+
 class H(BaseHTTPRequestHandler):
     def _send(self, body, ctype="application/json"):
         b = body.encode() if isinstance(body, str) else body
@@ -616,8 +691,10 @@ class H(BaseHTTPRequestHandler):
             if self.path == "/" or self.path.startswith("/index"):
                 self._send(PAGE, "text/html")
             elif self.path == "/api/index":
+                _reload()
                 self._send(json.dumps(build_index(), ensure_ascii=False))
             elif self.path.startswith("/api/problem/"):
+                _reload()
                 pid = self.path.rsplit("/", 1)[1]
                 self._send(render_problem_html(pid), "text/html")
             else:

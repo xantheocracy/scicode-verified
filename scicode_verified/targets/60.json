@@ -1,0 +1,10 @@
+{
+ "problem_id": "60",
+ "60.3": {
+  "0": true
+ },
+ "_rounds": [
+  "R3"
+ ],
+ "note": "R3 seeded-MC redesign of 60.3 Widom_insertion (single-insertion Boltzmann-factor generator). The seeded exact-float tests forced the RNG-protocol pin 'one call np.random.uniform(0,L,3) from the (legacy global) NumPy RNG' in the docstring. Replaced with a statistical test: loop Widom_insertion M=20000 times over a fixed 10-particle config (pos = np.random.seed(1); uniform(0,8,(10,3)); sigma=1, epsilon=1, r_c=3, T=1) and assert |mean(exp(-dU/T)) - 1.2129| < 0.02 (the ensemble <exp(-beta*dU)>; T=1 makes REF=1.2129 far from 1, so 'always returns 1' is rejected at ~45 sigma; wrong-sign and return-dU also fail). Docstring RNG pin stripped. 60.1/60.2/60.4 deterministic and 60.5 already statistical -> unchanged. Calibrated (ledger/_widom60_validate/): across-seed sigma 0.0047, seed(0) on REF, gold self-test rejects always-1/wrong-sign/return-dU."
+}

@@ -21,14 +21,14 @@
   },
   {
    "step_number": "21.2",
-   "step_description_prompt": "Provide a function that computes the effective absorption coefficient $\\alpha_x$ of $Al_xGa_{1-x}As$ as a function of input wavelength $\\lambda$ and Al composition $x$. (Other constants treated as $C$) Assume the former function m_eff(x, m0=1) is given. The electron charge is $1.6\\times 10^{-19} C$, the vacuum speed of light is $3\\times 10^8 m/s$ and the reduced Planck constant is $1.054571817\\times 10^{-34} J\\cdot s$. If the photon energy $\\hbar\\omega \\le E_g$ (below the band gap), the material is transparent at that wavelength and the absorption coefficient is 0.",
+   "step_description_prompt": "Provide a function that computes the effective absorption coefficient $\\alpha_x$ of $Al_xGa_{1-x}As$ as a function of input wavelength $\\lambda$ and Al composition $x$. (Other constants treated as $C$) Assume the former function m_eff(x, m0=1) is given. The electron charge is $1.6\\times 10^{-19} C$, the vacuum speed of light is $3\\times 10^8 m/s$ and the reduced Planck constant is $1.054571817\\times 10^{-34} J\\cdot s$. Express $\\hbar\\omega$ and $E_g$ in electron-volts (eV), and take the $\\omega$ in the denominator to be the photon energy $\\hbar\\omega$ in eV.",
    "step_background": "Background\n\nThe absorption coefficient is\n\n$\\alpha_{A l_{x} G a_{1-x} A s}= \\frac{C m_r^{A l_{x} G a_{1-x} A s} \\sqrt{\\left(\\hbar \\omega-E g_{A l_{x} G a_{1-x} A s}\\right)}}{\\omega }$",
    "ground_truth_code": null,
-   "function_header": "def alpha_eff(lambda_i, x, C=1):\n    '''Calculates the effective absorption coefficient of AlxGa1-xAs.\n    Input:\n    lambda (float): Wavelength of the incident light (nm).\n    x (float): Aluminum composition in the AlxGa1-xAs alloy.\n    C (float): Optional scaling factor for the absorption coefficient. Default is 1.\n    Returns:\n    Output (float): Effective absorption coefficient in m^-1.\n    '''",
+   "function_header": "def alpha_eff(lambda_i, x, C=1):\n    '''Calculates the effective absorption coefficient of AlxGa1-xAs.\n    Input:\n    lambda (float): Wavelength of the incident light (nm).\n    x (float): Aluminum composition in the AlxGa1-xAs alloy.\n    C (float): Optional scaling factor for the absorption coefficient. Default is 1.\n    Returns:\n    Output (float): effective absorption coefficient up to the lumped constant C (arbitrary scale), with all energies in eV; not a physical m^-1 value, intended for use as a ratio in alpha().\n    '''",
    "test_cases": [
     "assert np.allclose(alpha_eff(800, 0.2, 1), target)",
-    "assert np.allclose(alpha_eff(980, 0, 1), target)",
-    "assert np.allclose(alpha_eff(700, 0.2, 1), target)"
+    "assert np.allclose(alpha_eff(700, 0.2, 1), target)",
+    "assert np.allclose(alpha_eff(650, 0.1, 1), target)"
    ],
    "return_line": "    return alpha_x"
   },

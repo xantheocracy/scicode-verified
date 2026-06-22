@@ -1,20 +1,19 @@
 {
  "problem_id": "68",
- "68.7": {
-  "2": [
-   6,
-   8,
-   6,
-   6,
-   4,
-   8,
-   4,
-   8,
-   9,
-   4
-  ]
+ "note": "68 (helium DMC) seeded-MC redesign, R3. 68.5 metropolis: dropped nsteps -> ONE sweep (caller loops); stripped the legacy-global-RNG protocol block and the misleading 'a+u>1 (equivalent to u<a)' parenthetical; background reduced to the physics (propose r'=r+sqrt(tau)chi, accept if u<a). Tests replaced with the statistical <r>->3/(2 alpha) check (equilibrate 1000 sweeps, average over 8000, nconf=1000, tau=0.2, tol 0.02; alpha=1,2) == True. Same template as the landed 46.3. [68.5 + 68.7 + 68.8 landed.] 68.8 run_dmc: deleted the entire 10-step 'For reproducibility ... legacy global NumPy RNG' pseudocode block; prompt now states the DMC task + which provided pieces to use (68.5/68.6/68.7), weight & E_T update left to the background, return spec moved to the docstring. test1-4 (seeded exact energy sequences) replaced by 2 statistical energy-convergence tests (Z=2, MultiplyWF(Slater(2.0),Jastrow(0.5)), 5000 walkers, nstep=1000, drop first 100; tau=0.01 and tau=0.02) asserting |mean - (-2.903724)| < 0.05 == True; old test5's autocorrelation-SEM boilerplate dropped. Validated by background subagent: |dev|~0.008-0.010, dev+3*SEM<=0.022 across 8 seeds, insensitive to branch scheme / warmup length / time step. 68.7 branch: the seeded exact-index tests forced 'np.random.choice(...) and do-not-use-comb/residual' (over-specification existing only for bitwise reproduction). Relaxed to the functional contract -- return nconf indices, sampled with replacement, E[multiplicity of i] proportional to w_i, population size fixed -- and made the tests STATISTICAL: accumulate index frequencies over M=20000 calls and assert max|freq - w/sum(w)| < 0.01 == True. Verified general: multinomial / systematic(comb) / residual all pass; uniform / w^2-biased / no-multiplicity all fail. (Near-uniform DMC weights can't distinguish correct from uniform, so the test weights are deliberately spread.)",
+ "68.5": {
+  "0": true,
+  "1": true
  },
  "_rounds": [
-  "r1"
- ]
+  "R3"
+ ],
+ "68.7": {
+  "0": true,
+  "1": true
+ },
+ "68.8": {
+  "0": true,
+  "1": true
+ }
 }

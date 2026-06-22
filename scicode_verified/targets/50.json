@@ -1,0 +1,14 @@
+{
+ "problem_id": "50",
+ "50.1": {
+  "0": true
+ },
+ "50.4": {
+  "0": true,
+  "1": true
+ },
+ "_rounds": [
+  "R3"
+ ],
+ "note": "R3 seeded-MC redesign of the SK/RSB chain. 50.1 find_equilibrium (single equilibrium-sample generator) and 50.4 spin_glass had seeded exact-reproduction tests forcing RNG-protocol over-specification; replaced with statistical tests, prompts/background de-RNG'd. 50.1: average E/N over K=10 equilibrated replicas (N=100,T=0.5,num_steps=1000) within 3*0.0223 of REF=-0.4207 (random E/N~0 fails at 18.9 sigma; seed(0) at 1.52 sigma). 50.4: phase test -- high T=1.5 RSB=False/|mean|<0.05/std<0.18; low T=0.5 RSB=True/std>0.25 (N=50,steps=300,reps=20,realiz=5). 50.2/50.3 unchanged (deterministic; seed only makes inputs). Calibrated by background subagent (ref ledger/_sk50_validate/), 0% across-seed fail. NB REF is under-equilibration-dependent: if find_equilibrium's num_steps semantics change, re-pin REF."
+}

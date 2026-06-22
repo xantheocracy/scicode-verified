@@ -1,0 +1,21 @@
+{
+ "problem_id": "39",
+ "39.2": {
+  "0": {
+   "__complex__": [
+    0.0,
+    -0.9624236501192069
+   ]
+  },
+  "1": {
+   "__complex__": [
+    1.2213572639376833,
+    -0.9261330313501823
+   ]
+  }
+ },
+ "_rounds": [
+  "R3"
+ ],
+ "note": "R3 FIX: 39.2 get_theta switched from the artificial 'm=1 for simplicity' convention (theta = pi + i*arccosh(|x|) for ALL |x|>1, which gives cos(theta)=-|x|, contradicting cos theta=(A+D)/2 for x>1) to the standard principal-branch inversion theta = arccos(x) (cos theta = x in every regime). Re-froze 39.2 test1 (x=1.5 -> -0.9624j) and test2 (x=0.5+1j -> 1.2214-0.9261j); test3 (|x|<1) unchanged. 39.3 R targets UNCHANGED and VERIFIED identical: in the physical chain D=conj(A) so x=Re(A) is real and x<=1 (max 1 at cos2phi=1), and for x<-1 arccos == the old m=1 form; the reflectance only depends on |sin theta/sin N theta|^2 (invariant to Re(theta)). x>1 never occurs in 39.3, so the change only affects 39.2's two artificial standalone inputs. NaN note: arccos needs complex x (np.arccos(1.5)=NaN but np.arccos(1.5+0j) works); A,D are complex so x is complex."
+}

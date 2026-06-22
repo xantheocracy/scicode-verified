@@ -1,20 +1,24 @@
 {
  "problem_id": "72",
- "72.7": {
-  "2": [
+ "72.5": {
+  "1": [
    1.0,
-   1.0,
-   1.0,
-   1.0,
-   1.0,
-   0.6049382716049383,
-   0.6049382716049383,
-   0.30864197530864196,
-   0.30864197530864196,
-   0.30864197530864196
+   2
   ]
  },
+ "72.7": {
+  "0": true
+ },
+ "72.8": {
+  "0": true
+ },
+ "72.9": {
+  "0": true,
+  "1": true
+ },
  "_rounds": [
-  "r1"
- ]
+  "r1",
+  "R3"
+ ],
+ "note": "R3 seeded-MC redesign of the 72.6-72.9 sweep chain: seeded exact-reproduction tests replaced by statistical ones; supersedes the r1 72.7/test3 array patch. 72.5 unchanged (acceptance prob A=min(1,exp(-beta*dH)); test2 var1=1.0). 72.6 flip: RNG-protocol block + stale 'raw ratio/A>=1' wording stripped; no direct test (verified via 72.7). 72.7 run(T,N,n_equil,n_measure): burn-in + measure, returns per-sweep mag2/N^4; test asserts |mean-0.9737|<3*blocking_err at T=1.5,N=10,ne=300,nm=1000 (low T; N=10 too small for metastable stripes -> reliable). 72.8 scan_T(Ts,N,n_equil,n_measure): per-T means; test asserts phase separation (mag2[0]>0.85, mag2[-1]<0.40, gap>0.5, max==[0]). 72.9 calc_transition: deterministic unit test + physics Tc->2.26919 within 0.2 (scan_T N=16,ne=500,nm=500). All re-frozen to booleans. Calibrated by background subagent (ref impl ledger/_ising72_validate/)."
 }

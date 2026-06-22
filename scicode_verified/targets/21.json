@@ -1,0 +1,12 @@
+{
+ "problem_id": "21",
+ "note": "21.2 upstream test was VACUOUS: original targets (0,0,4.36e-27) all <= np.allclose default atol=1e-8, so `return 0` passed the whole step (root cause: SI-Joule units + 1/omega make alpha_eff ~1e-27; the real prefactor is lumped into C=1). alpha_eff is an intermediate (C arbitrary; 21.3 takes the ratio so C cancels and 21.3 is unaffected). Rescaled to eV-natural units (energies in eV, omega := hbar*omega in eV) -> O(1e-2), and restructured tests: keep one below-gap point (alpha=0 boundary) + two above-gap points with distinct (lambda,x). Targets recomputed from the 21.2 formula alpha=C*m_r*sqrt(hbar w - Eg)/w.",
+ "21.2": {
+  "0": 0.0,
+  "1": 0.016536189246108383,
+  "2": 0.0263215767269641
+ },
+ "_rounds": [
+  "R3"
+ ]
+}
