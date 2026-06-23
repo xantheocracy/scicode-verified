@@ -1,6 +1,16 @@
 {
  "problem_id": "28",
  "targets": {
+  "28.1": {
+   "_transform": "Regenerate 28.1 targets var1=P1 (before) and var2=P2 (after) for tests 0,1,2 using the prompt's Fresnel transfer-function method: H=exp(-i*pi*lambda*z*(fx^2+fy^2)) on the (N+1)x(N+1) grid x in [-L/2,L/2] with dx=L/N; gau=|field|, P=sum(gau)*dA, dA=(L/N)^2. var1 (before) is recomputed identically to upstream; var2 (after) is replaced with the Fresnel-TF value.",
+   "_type": "gaussian_fresnel_tf",
+   "configs": [
+    {"N": 500, "Ld": 6.328e-07, "w0": 1.0e-3, "z": 10, "L": 1.0e-2},
+    {"N": 800, "Ld": 6.328e-07, "w0": 1.5e-3, "z": 15, "L": 1.6e-2},
+    {"N": 400, "Ld": 6.328e-07, "w0": 1.5e-3, "z": 20, "L": 8.0e-3}
+   ],
+   "verify_P2_fresnel": [7.044989e-06, 1.183469e-05, 1.296014e-05]
+  },
   "28.3": {
    "_transform": "For tests 0,1,2 the target is a tuple (Wz, focus_depth, Intensity). Replace ONLY the Intensity component (tuple index 2, an (801,801) array) with its element-wise SQUARE: Int_new = Int_old**2 (true |E|^2). Wz (index 0) and focus_depth (index 1) UNCHANGED. test3 = (True,True) UNCHANGED.",
    "verify_corner_old_amp": [
@@ -15,9 +25,10 @@
    ]
   }
  },
- "format": "28.3 \u4ec5 Intensity \u5206\u91cf\u5e73\u65b9(\u632f\u5e45\u2192\u771f\u00b7\u5f3a\u5ea6|E|\u00b2);28.1/28.2 \u65e0 target \u6539\u52a8\u3002Int \u6570\u7ec4 801\u00d7801,\u6545\u8bb0\u53d8\u6362\u89c4\u5219+\u89d2\u70b9\u6821\u9a8c,\u4e0d\u5185\u8054\u5168\u6570\u7ec4\u3002",
- "note": "28.3 \u51bb\u7ed3 target \u7684 'Intensity' \u5176\u5b9e\u662f\u5355\u4f4d\u5cf0\u503c\u632f\u5e45 |E|(\u89d2\u70b9=exp(-r\u00b2/w\u00b2)),\u4e0e\u9898\u540d/\u9898\u9762/docstring \u7684 'intensity' \u77db\u76fe\u3002\u72ec\u7acb\u590d\u73b0\u786e\u8ba4:target\u89d2\u70b9=\u632f\u5e45,\u5e73\u65b9\u540e=|E|\u00b2(0.9405/0.9820/0.9832)\u3002\u552f\u4e00 fix-by-target \u9879;\u5176\u4f59(\u9891\u7387\u7f51\u683c1/L\u3001\u5355\u4f4d\u5cf0\u503c\u5f52\u4e00\u5316\u3001\u7edd\u5bf9-z\u51e0\u4f55\u3001\u7126\u70b9grid-argmin\u3001\u5355\u4f4dmm)\u5747 fix-by-doc \u65e0 target \u6539\u3002",
+ "format": "28.1 P2 regenerated via the prompt's Fresnel-TF method (R4). 28.3 only Intensity squared (amplitude->true |E|^2); 28.2 no target change. Large arrays (Int 801x801) handled by transform spec + corner-check, not inlined.",
+ "note": "28.1 (R4, option B): the UPSTREAM 28.1 gold (P2 = 7.067e-6 / 1.185e-5 / 1.298e-5) was NOT reproducible by any standard propagation method (Fresnel-TF, exact angular spectrum, analytic, analytic-on-grid, Fresnel impulse-response) and was internally INCONSISTENT with 28.3: a Fresnel-TF model (deepseek-v4-pro) PASSES 28.3 (whose Intensity is computed via propagate_gaussian_beam) but FAILED 28.1 -> the upstream 28.1 gold came from a different/non-standard method, the odd one out in its own problem. The prompt already prescribes the Fresnel-TF method (H=exp(-i*pi*lambda*z*(fx^2+fy^2))); we regenerate the 28.1 target with that method so prompt + 28.1 + 28.3 are all self-consistent. New P2 = 7.044989e-6 / 1.183469e-5 / 1.296014e-5 (P1 unchanged). Verified: 28.2 is independent (ABCD/q-parameter), 28.3 already passes under Fresnel-TF -> no downstream impact. 28.3 note: its frozen 'Intensity' was actually unit-peak amplitude |E| (corner=exp(-r^2/w^2)), squared to |E|^2 (0.9405/0.9820/0.9832).",
  "_rounds": [
-  "r1"
+  "r1",
+  "R4"
  ]
 }

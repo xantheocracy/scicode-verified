@@ -26,15 +26,15 @@
    "ground_truth_code": null,
    "function_header": "def Numerov(f_in, u_at_0, up_at_0, step):\n    '''Given precomputed function f(r), solve the differential equation u''(r) = f(r)*u(r)\n    using the Numerov method.\n    Inputs:\n    - f_in: input function f(r); a 1D array of float representing the function values at discretized points.\n    - u_at_0: the value of u at r = 0; a float.\n    - up_at_0: the derivative of u at r = 0; a float.\n    - step: step size; a float.\n    Output:\n    - u: the integration results at each point in the radial grid; a 1D array of float.\n    '''",
    "test_cases": [
-    "assert np.allclose(Numerov(f_Schrod(1,3, np.linspace(1e-5,10,20)), 0.0, -1e-3, np.linspace(1e-5,10,20)[0]-np.linspace(1e-5,10,20)[1]), target)",
-    "assert np.allclose(Numerov(f_Schrod(1,2, np.linspace(1e-5,10,20)), 0.0, -1e-3, np.linspace(1e-5,10,20)[0]-np.linspace(1e-5,10,20)[1]), target)",
-    "assert np.allclose(Numerov(f_Schrod(2,3, np.linspace(1e-5,10,20)), 0.0, -1e-3, np.linspace(1e-5,10,20)[0]-np.linspace(1e-5,10,20)[1]), target)"
+    "u = Numerov(f_Schrod(1,3, np.linspace(1e-5,10,20)), 0.0, -1e-3, np.linspace(1e-5,10,20)[0]-np.linspace(1e-5,10,20)[1])\nassert np.allclose(u/np.linalg.norm(u), np.asarray(target)/np.linalg.norm(target))",
+    "u = Numerov(f_Schrod(1,2, np.linspace(1e-5,10,20)), 0.0, -1e-3, np.linspace(1e-5,10,20)[0]-np.linspace(1e-5,10,20)[1])\nassert np.allclose(u/np.linalg.norm(u), np.asarray(target)/np.linalg.norm(target))",
+    "u = Numerov(f_Schrod(2,3, np.linspace(1e-5,10,20)), 0.0, -1e-3, np.linspace(1e-5,10,20)[0]-np.linspace(1e-5,10,20)[1])\nassert np.allclose(u/np.linalg.norm(u), np.asarray(target)/np.linalg.norm(target))"
    ],
    "return_line": "    return u"
   },
   {
    "step_number": "12.3",
-   "step_description_prompt": "Write a function to solve the Schroedinger equation using the two functions defined above (f_Schrod and Numerov). Normalize the result using Simpson's rule. The u_at_0 is 0, up_at_0 is -1e-7. Do the integration from the largest radius. The numerov step size should be r_grid[0]-r_grid[1].",
+   "step_description_prompt": "Write a function to solve the Schroedinger equation using the two functions defined above (f_Schrod and Numerov). Normalize the result using Simpson's rule. Do the integration from the largest radius, where u = 0 and u' = -1e-7. The numerov step size should be r_grid[0]-r_grid[1].",
    "step_background": "",
    "ground_truth_code": null,
    "function_header": "def compute_Schrod(energy, r_grid, l):\n    '''Input \n    energy: a float\n    r_grid: the radial grid; a 1D array of float\n    l: angular momentum quantum number; an int\n    Output\n    ur_norm: normalized wavefunction u(x) at x = r\n    '''",

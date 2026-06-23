@@ -124,6 +124,31 @@ with h5py.File(OUT, 'a') as f:
             print(f'  transform {step}: regenerated {len(tests)} tests with strict cross-band boundary (>)')
             continue
 
+        # --- 28.1: regenerate (P1,P2) with the prompt's Fresnel transfer-function method ---
+        if spec.get('_type') == 'gaussian_fresnel_tf':
+            for i, c in enumerate(spec['configs']):
+                N, Ld, w0, z, L = c['N'], c['Ld'], c['w0'], c['z'], c['L']
+                M = N + 1
+                x = np.linspace(-L / 2.0, L / 2.0, M); dx = L / N
+                X, Y = np.meshgrid(x, x, indexing='ij')
+                E0 = np.exp(-(X**2 + Y**2) / w0**2)
+                fx = np.fft.fftfreq(M, d=dx); FX, FY = np.meshgrid(fx, fx, indexing='ij')
+                H = np.exp(-1j * np.pi * Ld * z * (FX**2 + FY**2))
+                Ep = np.fft.ifft2(np.fft.fft2(E0) * H)
+                dA = (L / N)**2
+                P1 = float(np.sum(np.abs(E0)) * dA); P2 = float(np.sum(np.abs(Ep)) * dA)
+                gp = f'{step}/test{i+1}'
+                if gp in f:
+                    del f[gp]
+                g = f.create_group(gp)
+                g.create_dataset('var1', data=P1); g.create_dataset('var2', data=P2)
+            exp = spec.get('verify_P2_fresnel')
+            if exp:
+                got = [float(np.asarray(f[f'{step}/test{i+1}/var2'][()])) for i in range(len(exp))]
+                assert all(abs(a - b) < 1e-9 for a, b in zip(got, exp)), f'{step} P2 mismatch: {got} != {exp}'
+            print(f'  transform {step}: regenerated {len(spec["configs"])} tests via Fresnel-TF (P2-check OK)')
+            continue
+
         # --- 28.3 legacy: var3 -> var3**2 ---
         squared = 0
         for t in sorted([k for k in f[step] if k.startswith('test')], key=lambda t: int(t[4:])):
