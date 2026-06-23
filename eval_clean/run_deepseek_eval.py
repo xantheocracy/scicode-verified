@@ -12,8 +12,19 @@ Setup:
     export DEEPSEEK_API_KEY=sk-...
     python3 eval_clean/run_deepseek_eval.py
     # quick check first:   python3 eval_clean/run_deepseek_eval.py --only 58,73,22
+
+Multi-version OR grading (robust to numpy/scipy API drift):
+    Grading is output-based (np.allclose to gold), so a step's verdict shouldn't depend on
+    which library version happens to expose the function name the model called (scipy 1.14
+    dropped integrate.simps->simpson, cumtrapz->cumulative_trapezoid; numpy 2.0 dropped
+    np.trapz->trapezoid). Pass --envs to grade each saved step under several pinned envs and
+    PASS if it's correct in ANY of them (the OR) -- API-era-agnostic, no false passes:
+        python3 eval_clean/run_deepseek_eval.py --run run4 \
+            --envs 2024:/path/envs/sci2024/bin/python 2025:/path/envs/cp312/bin/python
+    Short-circuits on the first passing env; add --full-envs for the per-env breakdown.
+    Each <step>.score.json records {"passed", "per_env": {label: bool}}.
 """
-import os, sys, json, re, subprocess, argparse, time
+import os, sys, json, re, subprocess, argparse, time, collections
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -36,6 +47,18 @@ BASE_URL, KEY_ENV = PROVIDERS[PROVIDER]
 
 MAX_TOKENS = None      # per-call output cap; None = API default. Set via --max-tokens.
 VERBOSE_STEPS = False   # print one line per sub-step (default: only per-problem). Set via --verbose-steps.
+
+# Multi-ENVIRONMENT OR grading (pass-if-any across library versions). Default: a single env =
+# the current interpreter. Set multiple via --envs to make grading robust to numpy/scipy API
+# drift (simps->simpson, trapz->trapezoid, interp2d removal, ...): a step PASSES if its saved
+# code is correct in ANY listed env. Output-based (np.allclose to gold) so accepting a renamed-
+# but-identical API is safe (no false passes). Short-circuits on the first passing env unless
+# --full-envs (breakdown mode runs them all).
+GRADING_ENVS = None    # list[(label, python_path)]; set in main()
+FULL_ENVS = False      # run every env per step even after one passes (breakdown). Set via --full-envs.
+# Thread caps so many parallel grading subprocesses don't oversubscribe the box via BLAS.
+SUBENV = {**os.environ, "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1", "NUMEXPR_NUM_THREADS": "1"}
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC  = ROOT / "SciCode" / "src"
@@ -123,20 +146,33 @@ def gen(client, prompt, model, retries=8):
             is_rate = "429" in s or "rate" in s or "limit" in s or type(e).__name__ == "RateLimitError"
             time.sleep(min(90, (12 if is_rate else 3) * (2 ** a)))   # exp backoff; longer on rate-limit
 
-def score_step(cumcode, test_cases, step_id, tmpdir):
+def _run_script(py, path):
+    try:
+        p = subprocess.run([py, str(path)], capture_output=True, text=True,
+                           timeout=1800, env=SUBENV)   # match official SciCode per-step timeout
+        return p.returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
+
+def score_step(cumcode, test_cases, step_id, tmpdir, envs):
+    """Grade the cumulative step under each env in `envs`; PASS if ANY env passes (the OR).
+    Short-circuits on the first passing env unless FULL_ENVS (breakdown mode runs them all).
+    Returns {"passed": bool, "per_env": {label: bool}} — per_env holds only the envs run."""
     script = [cumcode, "", f"import sys; sys.path.insert(0, r'{SRC.as_posix()}')",
               "from scicode.parse.parse import process_hdf5_to_tuple",
               f"targets = process_hdf5_to_tuple('{step_id}', {len(test_cases)}, r'{H5}')"]
     for i, tc in enumerate(test_cases):
         script += [f"target = targets[{i}]", tc]
     f = tmpdir / f".score_{step_id}_{time.time_ns()}.py"; f.write_text("\n".join(script))
+    per_env = {}
     try:
-        p = subprocess.run([sys.executable, str(f)], capture_output=True, text=True, timeout=1800)  # match official SciCode per-step timeout
-        return p.returncode == 0
-    except subprocess.TimeoutExpired:
-        return False
+        for label, py in envs:
+            per_env[label] = _run_script(py, f)
+            if per_env[label] and not FULL_ENVS:
+                break   # OR short-circuit: one passing env is enough
     finally:
         f.unlink(missing_ok=True)
+    return {"passed": any(per_env.values()), "per_env": per_env}
 
 def run_problem(prob, client, model, with_bg, outdir):
     pid = str(prob["problem_id"]); cdir = outdir / pid; cdir.mkdir(parents=True, exist_ok=True)
@@ -172,10 +208,22 @@ def run_problem(prob, client, model, with_bg, outdir):
         prev.append(code); cum += "\n\n" + code
         sf = cdir / f"{sid}.score.json"   # cache the verdict so resume skips re-scoring already-done steps
         if sf.exists():
-            steps[sid] = json.loads(sf.read_text()).get("passed")
+            cached = json.loads(sf.read_text())
+            steps[sid] = cached.get("passed")
+            # Multi-env resume (new-format caches only): a cached FAIL might pass under a grading
+            # env added since it was scored. Grade ONLY the not-yet-tried envs and merge — OR is
+            # monotonic, so a cached PASS (or a legacy cache without per_env) is reused as-is.
+            if "per_env" in cached and steps[sid] is False:
+                missing = [(l, p) for (l, p) in GRADING_ENVS if l not in cached["per_env"]]
+                if missing:
+                    res = score_step(cum, sub["test_cases"], sid, cdir, missing)
+                    pe = {**cached["per_env"], **res["per_env"]}
+                    steps[sid] = any(pe.values())
+                    sf.write_text(json.dumps({"step_id": sid, "passed": steps[sid], "per_env": pe}))
         else:
-            steps[sid] = score_step(cum, sub["test_cases"], sid, cdir)
-            sf.write_text(json.dumps({"step_id": sid, "passed": steps[sid]}))
+            res = score_step(cum, sub["test_cases"], sid, cdir, GRADING_ENVS)
+            steps[sid] = res["passed"]
+            sf.write_text(json.dumps({"step_id": sid, "passed": steps[sid], "per_env": res["per_env"]}))
         if VERBOSE_STEPS:
             mark = "ok" if steps[sid] else "X"
             print(f"    {sid} ({k+1}/{len(prob['sub_steps'])}): {mark}", flush=True)
@@ -211,6 +259,25 @@ def run_config(model, with_bg, probs, workers, run_tag):
             print(f"  [{done}/{total}] prob {r['problem_id']:>3}: {r['n_steps_ok']}/{r['n_steps_scored']} steps "
                   f"{'OK' if r['problem_correct'] else 'x '}  | running: {po}/{len(results)} probs solved, "
                   f"{so}/{st} steps {round(100*so/st) if st else 0}%", flush=True)
+    if FULL_ENVS and len(GRADING_ENVS) > 1:   # per-env breakdown (only complete when all envs run)
+        labels = [l for l, _ in GRADING_ENVS]
+        env_ok = {l: 0 for l in labels}; tot = 0; or_ok = 0; combo = collections.Counter()
+        for r in results:
+            for sfp in (outdir / r["problem_id"]).glob("*.score.json"):
+                pe = json.loads(sfp.read_text()).get("per_env") or {}
+                if not pe: continue
+                tot += 1
+                if any(pe.values()): or_ok += 1
+                for l in labels:
+                    if pe.get(l): env_ok[l] += 1
+                combo[frozenset(l for l in labels if pe.get(l))] += 1
+        if tot:
+            print(f"  --- per-env step breakdown ({label}) ---")
+            for l in labels:
+                print(f"    env {l:>10}: {env_ok[l]}/{tot} = {100*env_ok[l]/tot:.1f}%")
+            print(f"    OR(any)    : {or_ok}/{tot} = {100*or_ok/tot:.1f}%")
+            for s, c in sorted(combo.items(), key=lambda kv: -kv[1]):
+                print(f"      passed-in[{'+'.join(sorted(s)) if s else 'NONE'}]: {c}")
     ts = sum(r["n_steps_scored"] for r in results); to = sum(r["n_steps_ok"] for r in results)
     po = sum(r["problem_correct"] for r in results)
     summary = {"run_tag": run_tag, "model": model, "with_background": with_bg,
@@ -238,13 +305,33 @@ def main():
                     help="also print one line per sub-step (default: only per-problem progress)")
     ap.add_argument("--provider", choices=list(PROVIDERS), default="deepseek",
                     help="API endpoint: deepseek (official) or ali (DashScope). Same model+effort, different endpoint.")
+    ap.add_argument("--envs", nargs="+", default=None,
+                    help="multi-version OR grading: space-separated 'label:python_path' envs. A step "
+                         "PASSES if its code is correct in ANY env -> robust to numpy/scipy API drift. "
+                         "Default: a single env = the current interpreter. e.g. --envs "
+                         "2024:/opt/conda/envs/sci2024/bin/python 2025:/opt/conda/envs/cp312/bin/python")
+    ap.add_argument("--full-envs", action="store_true",
+                    help="grade under EVERY --envs env per step (no short-circuit) and print a per-env "
+                         "breakdown; default stops at the first passing env (faster).")
     a = ap.parse_args()
     _check_manifest()   # refuse to run on stale/edited data (verify-with-human invariant 5)
-    global MAX_TOKENS, VERBOSE_STEPS, PROVIDER, BASE_URL, KEY_ENV
+    global MAX_TOKENS, VERBOSE_STEPS, PROVIDER, BASE_URL, KEY_ENV, GRADING_ENVS, FULL_ENVS
     MAX_TOKENS = a.max_tokens
     VERBOSE_STEPS = a.verbose_steps
     PROVIDER = a.provider
     BASE_URL, KEY_ENV = PROVIDERS[PROVIDER]
+    FULL_ENVS = a.full_envs
+    if a.envs:
+        GRADING_ENVS = []
+        for e in a.envs:
+            if ":" not in e: sys.exit(f"--envs entry '{e}' must be 'label:python_path'")
+            lab, py = e.split(":", 1)
+            if not os.path.exists(py): sys.exit(f"--envs python not found: {py}")
+            GRADING_ENVS.append((lab, py))
+    else:
+        GRADING_ENVS = [("default", sys.executable)]
+    print("grading envs (OR, pass-if-any): " + ", ".join(f"{l}->{p}" for l, p in GRADING_ENVS)
+          + (" [FULL: every env per step]" if FULL_ENVS else " [short-circuit on first pass]"))
     probs = [json.loads(l) for l in open(DATA)]
     if a.only:
         keep = set(a.only.split(",")); probs = [p for p in probs if str(p["problem_id"]) in keep]
