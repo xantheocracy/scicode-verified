@@ -56,6 +56,14 @@ VERBOSE_STEPS = False   # print one line per sub-step (default: only per-problem
 # --full-envs (breakdown mode runs them all).
 GRADING_ENVS = None    # list[(label, python_path)]; set in main()
 FULL_ENVS = False      # run every env per step even after one passes (breakdown). Set via --full-envs.
+# When --envs is omitted, grade under BOTH a 2024-era and a 2025-era scientific-Python env by
+# default (OR / pass-if-any), so results are robust to numpy/scipy API drift. Override with
+# SCICODE_GRADE_ENVS="label:path,label:path". Entries whose python is missing are skipped; if
+# none exist (e.g. a dev box without these envs), it falls back to a single env (current python).
+DEFAULT_ENVS = [
+    ("2024", "/home/xcai/miniconda3/envs/sci2024/bin/python"),  # numpy 1.26 / scipy 1.13 (has simps, trapz)
+    ("2025", "/home/xcai/miniconda3/envs/cp312/bin/python"),    # numpy 2.4 / scipy 1.17
+]
 # Thread caps so many parallel grading subprocesses don't oversubscribe the box via BLAS.
 SUBENV = {**os.environ, "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1",
           "MKL_NUM_THREADS": "1", "NUMEXPR_NUM_THREADS": "1"}
@@ -329,7 +337,11 @@ def main():
             if not os.path.exists(py): sys.exit(f"--envs python not found: {py}")
             GRADING_ENVS.append((lab, py))
     else:
-        GRADING_ENVS = [("default", sys.executable)]
+        # default: grade under BOTH era-envs (OR). Env var override, else DEFAULT_ENVS.
+        ev = os.environ.get("SCICODE_GRADE_ENVS")
+        cand = ([(e.split(":", 1)[0], e.split(":", 1)[1]) for e in ev.split(",") if ":" in e]
+                if ev else DEFAULT_ENVS)
+        GRADING_ENVS = [(l, p) for l, p in cand if os.path.exists(p)] or [("default", sys.executable)]
     print("grading envs (OR, pass-if-any): " + ", ".join(f"{l}->{p}" for l, p in GRADING_ENVS)
           + (" [FULL: every env per step]" if FULL_ENVS else " [short-circuit on first pass]"))
     probs = [json.loads(l) for l in open(DATA)]
