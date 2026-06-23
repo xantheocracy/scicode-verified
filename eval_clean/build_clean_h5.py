@@ -149,6 +149,36 @@ with h5py.File(OUT, 'a') as f:
             print(f'  transform {step}: regenerated {len(spec["configs"])} tests via Fresnel-TF (P2-check OK)')
             continue
 
+        # --- 40.3: regenerate final u with the physically self-consistent split-operator scheme ---
+        if spec.get('_type') == 'split_operator_physical':
+            def _sd(target, u, dx):
+                n = len(u)
+                if target == 0: l, r = u[0], u[1]
+                elif target == n - 1: l, r = u[target - 1], u[target]
+                else: l, r = u[target - 1], u[target + 1]
+                return (r - 2 * u[target] + l) / (dx * dx)
+            def _strang(u, dt, dx, alpha):
+                uh = u + 0.5 * dt * u**2
+                d = np.array([_sd(i, uh, dx) for i in range(len(u))])
+                ut = uh + dt * alpha * d
+                return ut + 0.5 * dt * ut**2
+            for i, c in enumerate(spec['configs']):
+                CFL, T, dt, alpha = c['CFL'], c['T'], c['dt'], c['alpha']
+                N = round(2 / (dt / CFL)) + 2
+                x = np.linspace(-1, 1, N); dx = x[1] - x[0]
+                u = np.where(x < 0, -1.0, 1.0)
+                for _ in range(round(T / dt)): u = _strang(u, dt, dx, alpha)
+                gp = f'{step}/test{i+1}'
+                if gp in f: del f[gp]
+                f.create_group(gp).create_dataset('var1', data=u)
+            exp = spec.get('verify_first3')
+            if exp:
+                for i, e in enumerate(exp):
+                    got = [float(v) for v in f[f'{step}/test{i+1}/var1'][()][:3]]
+                    assert all(abs(a - b) < 1e-5 for a, b in zip(got, e)), f'{step} test{i+1}: {got} != {e}'
+            print(f'  transform {step}: regenerated {len(spec["configs"])} tests via physical split-operator (real dx + exact-T)')
+            continue
+
         # --- 28.3 legacy: var3 -> var3**2 ---
         squared = 0
         for t in sorted([k for k in f[step] if k.startswith('test')], key=lambda t: int(t[4:])):

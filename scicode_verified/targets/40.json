@@ -1,0 +1,50 @@
+{
+ "problem_id": "40",
+ "targets": {
+  "40.3": {
+   "_transform": "Regenerate 40.3 var1 (final u, length N) for tests 0,1,2 with the physically self-consistent scheme: N=round(2/(dt/CFL))+2, x=linspace(-1,1,N), dx=x[1]-x[0] (ACTUAL grid spacing, NOT nominal dt/CFL), IC step function (-1 for x<0 else +1), Strang splitting (half-step u^2 / full-step alpha*u_xx via second_diff ghost-cells / half-step u^2, all forward-Euler), round(T/dt) steps to reach exactly T.",
+   "_type": "split_operator_physical",
+   "configs": [
+    {
+     "CFL": 0.2,
+     "T": 0.1,
+     "dt": 0.01,
+     "alpha": 0.1
+    },
+    {
+     "CFL": 0.3,
+     "T": 0.3,
+     "dt": 0.05,
+     "alpha": 0.05
+    },
+    {
+     "CFL": 0.1,
+     "T": 0.5,
+     "dt": 0.01,
+     "alpha": 0.2
+    }
+   ],
+   "verify_first3": [
+    [
+     -0.908694,
+     -0.908694,
+     -0.908694
+    ],
+    [
+     -0.765249,
+     -0.765247,
+     -0.765168
+    ],
+    [
+     -0.644628,
+     -0.637914,
+     -0.623463
+    ]
+   ]
+  }
+ },
+ "note": "40.3 (R4): the original prompt was internally inconsistent on the spatial step. 'x=linspace(-1,1,N)' forces the actual grid spacing to 2/(N-1) (e.g. 0.04878), while 'dx=dt/CFL'=0.05 is a different value, and the upstream gold fed the NOMINAL dx=0.05 into second_diff (40.1) - which is DEFINED as a finite-difference second derivative on the actual grid and therefore must use the real spacing. So the diffusion operator was a ~5%-wrong discretization on the stated grid; the domain [-1,1] is fixed so the grid spacing is authoritative. Also the time loop 'for t in arange(0,T+dt,dt)' ran one extra step (past T). Fix (option chosen): keep the grid as authoritative -> use dx=x[1]-x[0] in the scheme (dt/CFL only sets N), and integrate to exactly T with round(T/dt) steps. Regenerated gold with this self-consistent physical scheme (= deepseek-v4-pro's reading, which was rejected by the old inconsistent gold). second_diff/Strang (40.1/40.2) unchanged & gold-verified.",
+ "_rounds": [
+  "R4"
+ ]
+}

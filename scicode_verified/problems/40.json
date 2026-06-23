@@ -34,7 +34,7 @@
   },
   {
    "step_number": "40.3",
-   "step_description_prompt": "Write a function to solve the diffusion-reaction equation on x in [-1, 1] using the second-order spatial operator (second_diff) and Strang splitting (Strang_splitting), with a first-order forward-Euler update for each sub-step. Discretization: set dx = dt / CFL; build N = round(2/dx) + 2 equally spaced grid points x = np.linspace(-1, 1, N); set the initial condition u_i = -1 where x_i < 0 and u_i = +1 where x_i >= 0. Time stepping: advance the solution for t in np.arange(0, T+dt, dt); return the final u.",
+   "step_description_prompt": "Write a function to solve the diffusion-reaction equation on x in [-1, 1] using the second-order spatial operator (second_diff) and Strang splitting (Strang_splitting), with a first-order forward-Euler update for each sub-step. Discretization: use the CFL target to set the number of points, N = round(2/(dt/CFL)) + 2; build the grid x = np.linspace(-1, 1, N) and use its actual spacing dx = x[1] - x[0] in the scheme; set the initial condition u_i = -1 where x_i < 0 and u_i = +1 where x_i >= 0. Time stepping: advance the solution to time T using round(T/dt) Strang steps; return the final u.",
    "step_background": "",
    "ground_truth_code": null,
    "function_header": "def solve(CFL, T, dt, alpha):\n    '''Inputs:\n    CFL : Courant-Friedrichs-Lewy condition number\n    T   : Max time, float\n    dt  : Time interval, float\n    alpha : diffusive coefficient , float\n    Outputs:\n    u   : solution, array of float\n    '''",
