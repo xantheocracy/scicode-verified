@@ -100,6 +100,106 @@ with h5py.File(OUT, 'a') as f:
     for step in sorted(transforms, key=skey):
         spec = transforms[step]
 
+        # --- 13.9: regenerate derivatives target with the corrected A_z inner-boundary parity ---
+        if spec.get('_type') == 'maxwell_az_parity_fix':
+            import importlib.util
+            ref_path = os.path.join(ROOT, 'scicode_verified', 'refs', 'p13_ref.py')
+            rspec = importlib.util.spec_from_file_location('p13_ref', ref_path)
+            ref = importlib.util.module_from_spec(rspec)
+            rspec.loader.exec_module(ref)
+            setups = ref.field_setups()
+            for i, fields in enumerate(setups):
+                mw = ref.Maxwell(50, 2)
+                out = ref.derivatives(mw, fields)
+                gp = f'{step}/test{i+1}'
+                old = np.asarray(f[f'{gp}/var1'][()])
+                # faithfulness self-check: the reference must match the prior gold target on
+                # the 6 UNAFFECTED components; only A_z (component 5) may change.
+                for c in (0, 1, 2, 3, 4, 6):
+                    md = float(np.abs(np.asarray(out[c]) - old[c]).max())
+                    assert md < 1e-9, f'{step} test{i+1} comp{c} drifted {md:.2e} (ref not faithful to gold)'
+                az = float(np.abs(np.asarray(out[5]) - old[5]).max())
+                assert az > 1e-3, f'{step} test{i+1} A_z unchanged ({az:.2e}) — fix not applied'
+                # MINIMAL diff: keep gold's exact bytes for the 6 unaffected components,
+                # splice in ONLY the corrected A_z (component 5).
+                fixed = old.copy()
+                fixed[5] = np.asarray(out[5])
+                if gp in f:
+                    del f[gp]
+                f.create_group(gp).create_dataset('var1', data=fixed)
+            print(f'  transform {step}: regenerated {len(setups)} tests with corrected A_z parity (-,-,-) (self-check OK)')
+            continue
+
+        # --- 13.10: update_fields(derivatives(...)) — inherits 13.9's A_z fix via the linear update ---
+        if spec.get('_type') == 'maxwell_az_parity_fix_step10':
+            import importlib.util
+            ref_path = os.path.join(ROOT, 'scicode_verified', 'refs', 'p13_ref.py')
+            rspec = importlib.util.spec_from_file_location('p13_ref', ref_path)
+            ref = importlib.util.module_from_spec(rspec)
+            rspec.loader.exec_module(ref)
+            setups = ref.step10_setups()
+            for i, (fields, factor, dt) in enumerate(setups):
+                mw = ref.Maxwell(50, 2)
+                fd = ref.derivatives(mw, fields)
+                out = ref.update_fields(mw, list(fields), fd, factor, dt)
+                gp = f'{step}/test{i+1}'
+                old = np.asarray(f[f'{gp}/var1'][()])
+                for c in (0, 1, 2, 3, 4, 6):
+                    md = float(np.abs(np.asarray(out[c]) - old[c]).max())
+                    assert md < 1e-9, f'{step} test{i+1} comp{c} drifted {md:.2e} (ref not faithful to gold)'
+                az = float(np.abs(np.asarray(out[5]) - old[5]).max())
+                assert az > 1e-3, f'{step} test{i+1} A_z unchanged ({az:.2e}) — fix not applied'
+                fixed = old.copy()
+                fixed[5] = np.asarray(out[5])
+                if gp in f:
+                    del f[gp]
+                f.create_group(gp).create_dataset('var1', data=fixed)
+            print(f'  transform {step}: regenerated {len(setups)} tests via update_fields w/ corrected A_z (self-check OK)')
+            continue
+
+        # --- 13.11/13.12/13.13/13.15: evolution-test redesign (R5). Converged RK4 reference
+        #     on physical inputs; targets are field states (11/13), a scalar ‖divE‖ (12), or a
+        #     constraint series (15). See targets/13.json + p13_ref.py + the R5 design doc. ---
+        if spec.get('_type') == 'maxwell_evolution_ref':
+            import importlib.util
+            ref_path = os.path.join(ROOT, 'scicode_verified', 'refs', 'p13_ref.py')
+            rspec = importlib.util.spec_from_file_location('p13_ref', ref_path)
+            ref = importlib.util.module_from_spec(rspec)
+            rspec.loader.exec_module(ref)
+            for i, tc in enumerate(spec['tests']):
+                fn = getattr(ref, tc['fn'])
+                if tc['fn'] in ('ref_stepper', 'ref_integrate'):
+                    val = np.asarray(fn(tc['config']))
+                    # non-vacuity self-check: config1 develops only a SMALL E_z (sub-dominant;
+                    # z-physics is incidental), config2 makes E_z DOMINANT so the A_z/E_z parity
+                    # bug is detectable with large margin.
+                    ez = float(np.abs(val[2]).max())
+                    if tc['config'] == 1:
+                        assert ez < 0.05, f'{step} test{i+1} config1 E_z={ez:.2e} unexpectedly large'
+                    else:
+                        assert ez > 0.1, f'{step} test{i+1} config2 E_z={ez:.2e} should be >0.1 (z-excited)'
+                    assert np.all(np.isfinite(val)), f'{step} test{i+1} non-finite reference'
+                elif tc['fn'] == 'ref_check_constraint':
+                    val = np.asarray(float(fn(tc['which'])))
+                    assert np.isfinite(val), f'{step} test{i+1} non-finite constraint'
+                elif tc['fn'] == 'ref_main_series':
+                    val = np.asarray(fn(tc['n_grid'], tc['x_out']))
+                    assert val.ndim == 1 and np.all(np.isfinite(val)) and np.all(val >= 0), \
+                        f'{step} test{i+1} bad series {val}'
+                else:
+                    raise ValueError(f'{step}: unknown maxwell_evolution_ref fn {tc["fn"]}')
+                gp = f'{step}/test{i+1}'
+                if gp in f:
+                    del f[gp]
+                f.create_group(gp).create_dataset('var1', data=val)
+            # cross-test self-checks
+            if step == '13.12':
+                dip = float(np.asarray(f[f'{step}/test1/var1'][()]))
+                lin = float(np.asarray(f[f'{step}/test2/var1'][()]))
+                assert dip < lin, f'13.12 dipole constraint {dip} should be < linear {lin}'
+            print(f'  transform {step}: regenerated {len(spec["tests"])} tests via maxwell_evolution_ref (self-check OK)')
+            continue
+
         # --- 8.1: regenerate (T, filtered_image) with a STRICT cross-band boundary ---
         if spec.get('_type') == 'cshband_pass_strict':
             from numpy.fft import fft2, ifft2, fftshift, ifftshift
