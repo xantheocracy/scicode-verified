@@ -50,7 +50,7 @@ Per-model `symmetry()` args (verified by running each cumulative 13.1-13.9 vs go
   instead. Their agreement with gold's A_z is a red herring, not a vote for it.
 - "No model passes" → defect candidate, confirmed by the convention-independent proof below.
 
-## Evidence (reproductions in `analysis/_p13_code/`)
+## Evidence (reproductions in `research_by_problem/13/_p13_code/`)
 `repro_13_9.py`: run gemini's cumulative 13.1–13.9 against the gold 13.9 target, diff each
 of the 7 returned arrays:
 - E_x/E_y/E_z ~1e-12 (float noise), A_x/A_y ~2e-16, phi 0 → **match gold**.
@@ -85,7 +85,7 @@ gold on **all 7 components**, so 13.9 (and its cascade) would pass.
 Regenerated the **13.9** target with vector-consistent `A_z=(-1,-1,-1)`, spliced onto gold's
 own bytes for the other 6 components (minimal diff: only A_z changes, ~3.92; other 6 = 0).
 - Reference: `scicode_verified/refs/p13_ref.py` — our independent `_p13` operators
-  (`analysis/_p13/13.1-13.8`, verbatim) + a `derivatives` in gold's dipole convention.
+  (`research_by_problem/13/_p13/13.1-13.8`, verbatim) + a `derivatives` in gold's dipole convention.
 - **Faithfulness proof (build-time assert):** with the BUGGY `A_z=(1,1,-1)`, this reference
   reproduces the original gold 13.9 target to **1e-12 on ALL 7 components**; with the fix it
   changes ONLY A_z. So the swap is provably the lone, isolated correction.
@@ -94,7 +94,7 @@ own bytes for the other 6 components (minimal diff: only A_z changes, ~3.92; oth
   PASSED `--round R4 --scope full`.
 
 ## Cascade — why 13.10 is fixable but 13.11/13.13/13.15 are NOT (separate defect)
-Empirical test (`analysis/_p13_code/validate_ref.py`): run a faithful reference with A_z
+Empirical test (`research_by_problem/13/_p13_code/validate_ref.py`): run a faithful reference with A_z
 reverted to gold's buggy value and compare to the existing gold targets.
 - **13.10** (`update_fields`, one step after `derivatives`): reproduces gold to **5e-14** →
   faithful; the A_z fix propagates cleanly. **Fixable** (not yet landed; awaiting go).
@@ -114,8 +114,8 @@ A_y, phi to the models — but the real blocker was this gold A_z bug, which the
 could not fix (now fixed in the target). This note supersedes the "13.9 model error /
 hard-but-sound" reading AND the earlier "pro also uses (-,-,-)" claim (see table above).
 
-Repro scripts: `analysis/_p13_code/{repro_13_9.py, repro_az.py, validate_ref.py}`; reference:
-`scicode_verified/refs/p13_ref.py`; our operators: `analysis/_p13/13.1-13.9`.
+Repro scripts: `research_by_problem/13/_p13_code/{repro_13_9.py, repro_az.py, validate_ref.py}`; reference:
+`scicode_verified/refs/p13_ref.py`; our operators: `research_by_problem/13/_p13/13.1-13.9`.
 
 ## R5 — cascade RESOLVED by test redesign (13.11 / 13.12 / 13.13 / 13.15)
 The over-specification above is fixed not by recovering gold's exact ICN scheme but by
@@ -131,7 +131,7 @@ Design: `docs/superpowers/specs/2026-06-24-p13-evolution-test-redesign-design.md
 - **Two configs** (both σ=(-1,-1,1)): config1 = toroidal magnetic-dipole pulse
   (E_x=8y e^-r², E_y=-8x e^-r², rest 0) — exercises x–y evolution, develops only a small E_z;
   config2 = config1 + A_z = 8·xyz·e^-r² — drives a DOMINANT E_z, making the A_z/E_z parity
-  testable. Calibration (`analysis/_p13_code/_calib_R5.log`, n=64): field FLOOR (max over
+  testable. Calibration (`research_by_problem/13/_p13_code/_calib_R5.log`, n=64): field FLOOR (max over
   rk2/icn2/icn3) ≈ 2.9e-5 at t=0.2; the parity bug on config2 = **0.42** (margin ≈ 1.4e4×),
   sign-flip ≈ 5e2. atol frozen = 1.5× the global floor.
 - **Per step.** 13.11 `stepper`: evolve {config1,config2} to t_stepper=0.2, compare final

@@ -6,7 +6,7 @@ regenerate the 13.9 target with the corrected A_z inner-boundary symmetry parity
 Provenance / why this is faithful (NOT a single-model artifact):
   - The differential operators (partial_derivs_vec, laplace, gradient, divergence,
     grad_div), the Maxwell grid, symmetry, and outgoing_wave below are our own
-    independent reproduction (analysis/_p13/13.1-13.8), unchanged.
+    independent reproduction (research_by_problem/13/_p13/13.1-13.8), unchanged.
   - The per-field inner-boundary parities in derivatives() are gold's OWN convention
     (the z-axis magnetic-dipole configuration, σ=(-1,-1,1)). With the BUGGY A_z parity
     (1,1,-1) this reference reproduces the original gold 13.9 target to ~1e-12 on ALL
@@ -185,7 +185,7 @@ def step10_setups():
 # inline construction in the test_cases (scicode_verified/problems/13.json).
 # ============================================================================
 
-# fixed design parameters (frozen in the spec; calibration in analysis/_p13_code/calibrate_R5.py).
+# fixed design parameters (frozen in the spec; calibration in research_by_problem/13/_p13_code/calibrate_R5.py).
 # Philosophy (user): atol == the algorithm's OWN convergence error, set tight, not padded.
 #   test_courant small (0.02) so a 2nd-order ICN's time-discretization error is itself tiny;
 #   the spec requires "maxwell.t advanced by t_const" so a compliant stepper lands EXACTLY at
@@ -196,16 +196,24 @@ def step10_setups():
 # atol      : field-comparison tolerance (13.11 stepper, 13.13 final field). = 1.5x 2nd-order floor.
 # atol_series: constraint-series tolerance (13.15 main). The ‖.‖ operator amplifies field error by
 #             ~1/delta, so the series' own algorithm error is larger -> its own (still-tight) atol.
-# Both frozen from analysis/_p13_code/_calib_R5.log + _calib_series_R5.log.
-# Frozen from acceptance (analysis/_p13_code/self_pass_R5.py, n=64):
+# Both frozen from research_by_problem/13/_p13_code/_calib_R5.log + _calib_series_R5.log.
+# Frozen from acceptance (research_by_problem/13/_p13_code/self_pass_R5.py, n=64):
 #   field   atol=1e-4 : icn2 dev 1.4e-5 (t=0.2) / 2.7e-5 (t=0.5) -> ~4-7x margin; parity bug on
 #                       config2 = 0.42/1.67 (margin ~1e4x) and even on config1 (1.7e-4 > 1e-4).
 #   series  atol_series=1e-6 : icn2 series dev 1.35e-7 -> ~7x margin (the ‖divE‖ operator's own
 #                       tight tolerance; was mistakenly 1e-3 = 7400x too wide in the first cut).
+# atol         : 13.11 stepper final field @ t_stepper=0.2 (smaller accumulated error).
+# atol_integrate: 13.13 integrate final field @ t_max=0.5. Looser because a VALID 2nd-order ICN's
+#   time error grows with t: gemini-flash's k1/k3 scheme (a legit 2nd-order, error const larger
+#   than icn2's) lands at 1.08e-4 vs the converged ref at t=0.5 — above the 1e-4 used for t=0.2.
+#   Set 5e-4 (~4.6x the worst observed valid scheme; still ~800-3000x below any wrong-physics
+#   signal, e.g. the config2 parity bug = 1.67). Keeps the test admitting valid solvers while
+#   rejecting wrong answers. See research_by_problem/13/_p13_code/_diag_1313.log.
+# atol_series  : 13.15 constraint series (scheme-insensitive; ‖divE‖ operator).
 EVOL = dict(n_grid=64, x_out=2.0, c_az=8.0,
             ref_courant=0.05, test_courant=0.02,
             t_stepper=0.2, t_max=0.5, t_check=0.1,
-            atol=1e-4, atol_series=1e-6)
+            atol=1e-4, atol_integrate=5e-4, atol_series=1e-6)
 
 
 def config1_fields(mw):

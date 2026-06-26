@@ -11,7 +11,7 @@
    "step_description_prompt": "First consider the Schrodinger equation of the form: $(-\\frac{\\hbar^2}{2m}\\nabla^2-\\frac{Z e^2}{4\\pi\\varepsilon_0 r})\\psi(\\vec{r})=E \\psi(\\vec{r})$. Write a function to calculate $f(r)$ if we rewrite this Shroedinger equation in the form $u''(r) = f(r)u(r)$. The radii $r\\_grid$, energy $energy$ and angular momentum quantum number $l$ will be given as input. Use $Z=1$ in this step.",
    "step_background": "Background\nThe Schroedinger equation without the Hartree term is:\n\n\\begin{eqnarray}\n(-\\frac{\\hbar^2}{2m}\\nabla^2-\\frac{Z e^2}{4\\pi\\varepsilon_0 r})\\psi(\\vec{r})=E \\psi(\\vec{r})\n\\end{eqnarray}\n\nusing ansatz:\n\n$\\psi(\\vec{r}) = Y_{lm}(\\hat{r})\\; u(r)/r$\n\nand introducing dimensionless variables:\n\n\\begin{eqnarray}\nx = \\frac{r}{r_B}\\\\\n\\varepsilon = \\frac{E}{E_0}\n\\end{eqnarray}\nwhere\n\\begin{eqnarray}\n&& r_B = \\frac{4\\pi\\varepsilon_0 \\hbar^2}{m e^2} \\approx 0.529 A\\\\\n&& E_0 = \\frac{\\hbar^2}{2 m r_B^2} == Ry \\approx 13.6 eV\n\\end{eqnarray}\n\nwe get the differential equation\n\n\\begin{eqnarray}\nu''(x)-\n\\left(\\frac{l(l+1)}{x^2}-\\frac{2Z}{x}-\\varepsilon\\right)u(x)=0\n\\end{eqnarray}",
    "ground_truth_code": null,
-   "function_header": "def f_Schrod(energy, l, r_grid):\n    '''Input \n    energy: a float\n    l: angular momentum quantum number; an int\n    r_grid: the radial grid; a 1D array of float\n    Output\n    f_r: a 1D array of float \n    '''",
+   "function_header": "def f_Schrod(energy, l, r_grid):\n    '''Input \n    energy: a float (in Rydberg units)\n    l: angular momentum quantum number; an int\n    r_grid: the radial grid (in units of the Bohr radius); a 1D array of float\n    Output\n    f_r: a 1D array of float \n    '''",
    "test_cases": [
     "assert np.allclose(f_Schrod(1,1, np.array([0.1,0.2,0.3])), target)",
     "assert np.allclose(f_Schrod(2,1, np.linspace(1e-8,100,20)), target)",
@@ -52,9 +52,9 @@
    "ground_truth_code": null,
    "function_header": "def shoot(energy, r_grid, l):\n    '''Input \n    energy: a float\n    r_grid: the radial grid; a 1D array of float\n    l: angular momentum quantum number; an int\n    Output \n    f_at_0: float\n    '''",
    "test_cases": [
-    "assert np.allclose(shoot(1.1, np.linspace(1e-7,20,10), 0), target)",
-    "assert np.allclose(shoot(1.1, np.linspace(1e-7,20,10), 1), target)",
-    "assert np.allclose(shoot(1.1, np.linspace(1e-7,50,10), 2), target)"
+    "assert np.allclose(abs(shoot(1.1, np.linspace(1e-7,20,10), 0)), abs(target))",
+    "assert np.allclose(abs(shoot(1.1, np.linspace(1e-7,20,10), 1)), abs(target))",
+    "assert np.allclose(abs(shoot(1.1, np.linspace(1e-7,50,10), 2)), abs(target))"
    ],
    "return_line": "    return f_at_0"
   },
