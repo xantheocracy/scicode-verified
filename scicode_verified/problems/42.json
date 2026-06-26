@@ -21,7 +21,7 @@
   },
   {
    "step_number": "42.2",
-   "step_description_prompt": "Provide a function that calculate the injected current density according to the empirical relation with the peak gain. The inputs are the single-well peak gain coefficient ($g_w$), the empirical gain ($g_0$) and the corresponding empirical current density ($J_0$). The output is the actual current density ($J_w$).",
+   "step_description_prompt": "Provide a function that calculate the injected current density according to the empirical relation with the peak gain, in which the single-well peak gain $g_w$ equals the empirical gain $g_0$ times one plus the natural logarithm of $J_w/J_0$. The inputs are the single-well peak gain coefficient ($g_w$), the empirical gain ($g_0$) and the corresponding empirical current density ($J_0$). The output is the actual current density ($J_w$).",
    "step_background": "Background\n\nThe empirical relation between the material gain ($n_wg_w$) versus the injection current density ($n_wJ_w$) is\n\n$$\nn_{\\mathrm{w}} g_{\\mathrm{w}}=n_{\\mathrm{w}} g_0\\left[\\ln \\left(\\frac{n_{\\mathrm{w}} J_{\\mathrm{w}}}{n_{\\mathrm{w}} J_0}\\right)+1\\right]\n$$\n\nTherefore, we can get\n\n$$\nJ_{\\mathrm{w}}= J_0 \\exp \\left[\\left(\\frac{g_{\\mathrm{w}}}{g_0}\\right)-1\\right]\n$$",
    "ground_truth_code": null,
    "function_header": "def current_density(gw, g0, J0):\n    '''Calculates the current density J_w as a function of the gain coefficient g_w.\n    Input:\n    gw (float): Gain coefficient.\n    g0 (float): Empirical gain coefficient.\n    J0 (float): Empirical factor in the current density equation.\n    Output:\n    Jw (float): Current density J_w.\n    '''",
