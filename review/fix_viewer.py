@@ -204,16 +204,27 @@ def _targets_equal(a, b):
         np = None
 
     def eq(x, y):
+        # Compare by STRUCTURE first. A multi-var target (tuple/list, e.g. the original
+        # 13.11 `(t, field)`) vs a single-array target (e.g. the R5-redesigned 13.11
+        # `(7,64,64,64)` ndarray) are different by construction — handle element-wise and
+        # never feed a ragged tuple to np.asarray (which raises "inhomogeneous shape").
+        xseq = isinstance(x, (tuple, list))
+        yseq = isinstance(y, (tuple, list))
+        if xseq or yseq:
+            if not (xseq and yseq) or len(x) != len(y):
+                return False
+            return all(eq(p, q) for p, q in zip(x, y))
         if np is not None and (isinstance(x, np.ndarray) or isinstance(y, np.ndarray)):
-            ax, ay = np.asarray(x), np.asarray(y)
+            try:
+                ax, ay = np.asarray(x), np.asarray(y)
+            except Exception:
+                return False          # ragged / inhomogeneous -> treat as different
             if ax.shape != ay.shape:
                 return False
             try:
                 return bool(np.allclose(ax, ay, rtol=1e-9, atol=0, equal_nan=True))
             except Exception:
                 return bool(np.array_equal(ax, ay))
-        if isinstance(x, (tuple, list)) and isinstance(y, (tuple, list)):
-            return len(x) == len(y) and all(eq(p, q) for p, q in zip(x, y))
         # scipy sparse matrices: compare densely (avoids SparseEfficiencyWarning)
         if hasattr(x, "toarray") and hasattr(y, "toarray"):
             try:

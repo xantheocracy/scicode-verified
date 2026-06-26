@@ -17,6 +17,7 @@ data.zip
 /eval_clean/trap_check_64/
 /eval_clean/verify60/
 /eval_clean/_*.json
+/eval_clean/_*.log
 /review/work/
 /review/logs/
 /tmp_log/
@@ -24,6 +25,12 @@ data.zip
 /logs/
 out2.txt
 out_pro2.txt
+
+# ---- per-problem cleaning/review research scratch (consolidated; local-only) ----
+/research_by_problem/
+
+# ---- verify baselines (local snapshots; regenerated per round) ----
+/ledger/_baseline_*
 
 # ---- root-level ad-hoc scratch scripts ----
 /.t3_flash.py
