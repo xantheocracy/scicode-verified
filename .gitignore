@@ -7,8 +7,12 @@ data.zip
 #      h5 and third-party result dumps that may contain credentials ----
 /SciCode/
 
-# ---- superseded / historical build artifacts ----
+# ---- superseded / historical build artifacts & audit scratch (removed from the
+#      tree in the repo-tidy commit; kept in git history + local disk only) ----
 /legacy/
+/review/
+/clean_2round/
+/data/
 /eval_clean/build_h5.py
 /eval_clean/build_h5_round2.py
 
@@ -18,8 +22,6 @@ data.zip
 /eval_clean/verify60/
 /eval_clean/_*.json
 /eval_clean/_*.log
-/review/work/
-/review/logs/
 /tmp_log/
 /tmp_classify/
 /logs/
@@ -40,10 +42,8 @@ out_pro2.txt
 /test_each.py
 /test_one.py
 
-# ---- local agent / editor / python caches ----
-# ignore local Claude state, but keep project skills under version control
-/.claude/*
-!/.claude/skills/
+# ---- local agent / editor / python caches (Claude skills kept local, not shipped) ----
+/.claude/
 __pycache__/
 *.pyc
 .DS_Store

@@ -6,85 +6,85 @@
 
 ## 一句话结论
 
-两轮(逐题深审 + 全新代理对抗复核)在 80 题中确认大量缺陷,其中 **34/80 题含 blocker 级缺陷**(某一步「正确解过不了 / 错解轻松蒙混」)。因 SciCode 是「一步不过则整题判 0」,这些缺陷会系统性污染排行榜分数。完整缺陷登记见 [`review/DEFECT_REGISTRY.md`](review/DEFECT_REGISTRY.md)。
+两轮(逐题深审 + 全新代理对抗复核)在 80 题中确认 **397 条缺陷**,其中 **34/80 题含 blocker 级缺陷**(某一步「正确解过不了 / 错解轻松蒙混」)。因 SciCode 是「一步不过则整题判 0」,这些缺陷会系统性污染排行榜分数。完整审计叙事 + 逐题/分轮明细见 [`CLEANING_LOG.md`](CLEANING_LOG.md);逐条决策见 [`ledger/`](ledger/)。
 
 ## 仓库结构
 
 ```
-scicode_verified/          # ★ 发布产物
-  targets/                 #   合并后的 target 补丁(round1∪round2),重建 h5 的唯一数据源
-  problems_test.jsonl      #   清洗后的题面(64 题)
-  test_data_cleaned.h5     #   清洗后的判分数据(1GB,不进 git,由脚本重建 —— 见下)
-eval_clean/
-  build_clean_h5.py        # ★ 扁平 build:原始 h5 + targets/ → 清洗版 h5(一趟,无层层嵌套)
+scicode_verified/          # ★ 发布产物(数据)
+  problems/  targets/      #   SSOT:题面 + target 补丁(只改这里)
+  problems_test.jsonl      #   派生:清洗后的题面(64 题)
+  test_data_cleaned.h5     #   派生:判分数据(1GB,不进 git —— 从 Release 下载或脚本重建,见下)
+  manifest.json            #   版本 + 每个文件 md5(消费端据此拒绝 stale 数据)
+eval_clean/                # ★ 评测脚本
   run_deepseek_eval.py     #   对齐官方 harness 的自建 eval(no_bg 模板 / 1800s 超时 / skip 步注入 gold)
+  build_clean_h5.py        #   扁平 build:原始 h5 + targets/ → 清洗版 h5(一趟,无层层嵌套)
+  regrade_multienv.py      #   多环境(sci2024 + cp312)OR 打分,鲁棒于 numpy/scipy 漂移
   run_cleaned_eval.sh      #   用官方 inspect_ai 跑 cleaned/original 两种数据集
-  data_original/           #   原始题面(供 diff 对照)
-review/
-  fix_viewer.py            # ★ 改动可视化:原始→清洗逐处 diff + 理由 + 性质标签 + 轮次徽章
-  cleaning_log.json        #   两轮逐处改动的理由库(67 题 / 353 条)
-  build_cleaning_log.py    #   清洗日志的组装脚本
-  DEFECT_REGISTRY.md       #   缺陷总登记
-  problems/ verdicts/ findings/   # 逐题审计 / 裁决 / 发现
-clean_2round/              # round2 逐题交付物(problems/ targets/ audit/)—— 权威来源
-data/                      # 原始 SciCode 题面、模板、skip 步 gold txt(参考)
+tools/                     # ★ 释放闸门
+  assemble.py              #   SSOT → problems_test.jsonl + 刷新 manifest.json
+  verify.py                #   双向 verify gate(见下)
+ledger/                    #   决策账本:R3–R7.jsonl(逐条改动)+ BUG_*.md 深挖 + round6/ 延后项
+CLEANING_LOG.md            #   清洗全过程的可读日志(方法 / 缺陷统计 / 分轮)
 ```
 
-> 上游 `SciCode/`(基准代码 + 1GB 原始 `test_data.h5`)**不在本仓库**,需单独 clone(见下)。
+> 上游 `SciCode/`(基准代码 + 1GB 原始 `test_data.h5`)**不在本仓库**,仅重建 h5 时需要,单独 clone(见下)。
 
-## 复现清洗版数据集
+## 取得清洗版数据
 
-清洗版 h5 = 原始 h5 + `scicode_verified/targets/` 的补丁,完全可复现:
+**主路径 —— 从 GitHub Release 直接下载**(无需上游 SciCode / 无需重建):
 
 ```bash
-# 1) 取得上游 SciCode(含原始 test_data.h5)
-git clone <SciCode repo> SciCode
-# 原始 test_data.h5 应在 SciCode/eval/data/test_data.h5;若缺,用 hfd.sh 从 HuggingFace 下载
-
-# 2) 一趟重建清洗版 h5
-python3 eval_clean/build_clean_h5.py
-# → 写出 scicode_verified/test_data_cleaned.h5,并自检每个补丁值已落地
+# Release "data": test_data_cleaned.h5 + problems_test.jsonl + manifest.json
+gh release download data -R flyingwagner/scicode-verified -D scicode_verified/
+# 校验完整性(必须等于 manifest.json 的 h5_md5)
+md5sum scicode_verified/test_data_cleaned.h5   # 2b41a7df40ddc23ce651ec05b8ecb6f8
 ```
 
-`build_clean_h5.py` 支持三种补丁格式(FLAT / NESTED / TRANSFORM),自动处理加测试(37/45/79)与就地变换(28.3 取 |E|²)。改任意 target 只需改 `scicode_verified/targets/<id>.json` 再重跑。
+**备用路径 —— 从原始 h5 本地重建**(清洗版 h5 = 原始 h5 + `scicode_verified/targets/` 补丁,完全可复现):
+
+```bash
+git clone <SciCode repo> SciCode      # 原始 test_data.h5 应在 SciCode/eval/data/;若缺用 hfd.sh 从 HuggingFace 下
+python3 eval_clean/build_clean_h5.py  # → scicode_verified/test_data_cleaned.h5,并自检每个补丁值已落地
+```
+
+`build_clean_h5.py` 支持三种补丁格式(FLAT / NESTED / TRANSFORM),自动处理加测试(37/45/79)与就地变换(28.3 取 |E|²)。改任意 target 只需改 `scicode_verified/targets/<id>.json` 再重跑;重建结果必须复现 manifest 的 `h5_md5`。
 
 ## 评测
 
 ```bash
 # 自建 harness(对齐官方:no_bg 用 background_comment_template、per-step 1800s、skip 步注入 gold)
 DEEPSEEK_API_KEY=sk-... python3 eval_clean/run_deepseek_eval.py --run <tag> --workers 64 --background on
+# 前沿模型走 openrouter(本地运行):OPENROUTER_API_KEY=... --model gpt-5.5|gemini-flash|opus-4.8 --background off
 
 # 或用官方 inspect_ai 对 cleaned / original 两套数据打分
 EVAL_VARIANT=cleaned bash eval_clean/run_cleaned_eval.sh
 ```
 
-## 查看我们改了什么
-
-```bash
-PYTHONPATH=SciCode/src python3 review/fix_viewer.py 8077   # 端口为位置参数
-# 浏览器打开 http://127.0.0.1:8077/
-```
-
-每题展示原始→清洗的逐字段 / 逐 target diff,旁附:轮次徽章(R1/R2)、性质标签(必要约定 / 输出契约 / 容差放宽 / 数值旋钮 / 疑似泄露…)、改动理由。
+消费端启动即校验数据 md5 == `manifest.json`,不符**直接报错退出**,杜绝跑到 stale 数据。
 
 ## 清洗流程与校验闸门(verify-with-human)
 
 为杜绝「逐题看过/改过、但没真正落进发布产物」这类 desync bug,本项目的清洗按
-`.claude/skills/verify-with-human` 这套纪律执行:**决策即数据 → 只由源组装 → 双向断言 → manifest 绑定消费**。
+**verify-with-human** 这套纪律执行:**决策即数据 → 只由源组装 → 双向断言 → manifest 绑定消费**。
 
 - **SSOT(唯一事实源)**:`scicode_verified/problems/<id>.json`(题面)+ `scicode_verified/targets/<id>.json`(target)。**只改这里**。
 - **派生物**:`problems_test.jsonl`(由 `tools/assemble.py` 组装)、`test_data_cleaned.h5`(由 `eval_clean/build_clean_h5.py` 重建)。绝不手改。
 - **决策账本**:每条批准的改动记一条 `ledger/<round>.jsonl`:`{id, field, before, after, verdict, reason, round}`。
 
 ```bash
-python3 tools/assemble.py                       # SSOT -> jsonl + 刷新 manifest.json
-python3 tools/verify.py --scope prompt --round R3   # 双向闸门,不过则 exit≠0,禁止发布
+python3 tools/assemble.py                            # SSOT -> jsonl + 刷新 manifest.json
+python3 tools/verify.py --scope prompt --round R7    # 双向闸门,不过则 exit≠0,禁止发布
 ```
 
 `verify.py` 强制:**已决必已发**(ledger.after 在 SSOT)、**已变必有据**(任何相对上版的改动都要有 ledger)、**耦合不变**(prompt 轮 targets md5 必须不变)、**语法可解**。
-消费端(`run_deepseek_eval.py`)启动即校验数据 md5 == `manifest.json`,不符**直接报错退出**,杜绝跑到 stale 数据。
 
-## 已知限制 / 下一轮
+## 审计与决策记录
 
-- **prompt 改动可能存在过度解释**:目前对题面 prompt 的修改(主问题 prompt 与子步 prompt,**不含 background 及其他字段**)在审查中发现有些改写**透露了过多求解信息**(如推理性的 "so …" 解释句、本应留在 docstring 的公式/指代),即超出「去歧义所必需」的范围。下一轮将逐处复核并收紧,把非必要的解释从 prompt 移回 docstring 或删除,只保留定义输入/输出契约与消除歧义所需的最小信息。
+- 每处改动的**理由**与**分轮**:`ledger/R3–R7.jsonl` + `ledger/BUG_*.md`(#13 A_z 对称、#22 旋转符号等深挖)。
+- 缺陷的**方法学与统计**(按受影响字段 × 评测模式、逐题 blocker、pattern library):`CLEANING_LOG.md`。
+- 第一轮逐题 `findings/verdicts` 与详细缺陷登记表保留在 **git 历史**中(repo-tidy 提交时从工作树移除)。
 
+## 许可
+
+派生自 SciCode 基准(Apache-2.0);本清洗版数据据同一 Apache-2.0 许可再分发,更正与核验由 SciCode-Verified 作者完成。
