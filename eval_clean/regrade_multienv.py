@@ -52,20 +52,28 @@ def run_under(py, path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", default="run3")
-    ap.add_argument("--models", default="pro,flash")
+    ap.add_argument("--models", default="pro,flash",
+                    help="comma-separated REGISTRY keys (pro,flash,gpt-5.5,...) or raw vendor/model slugs")
+    ap.add_argument("--dataset", choices=["cleaned", "original"], default="cleaned",
+                    help="grade against the cleaned (default) or the pristine ORIGINAL data/h5; "
+                         "reads run dirs with the matching 'cleaned_'/'original_' prefix")
+    ap.add_argument("--bg", choices=["with_bg", "no_bg"], default="with_bg")
     ap.add_argument("--envs", nargs="+", required=True, help="label:python_path ...")
     ap.add_argument("--workers", type=int, default=32)
     a = ap.parse_args()
 
+    if a.dataset == "original":
+        R.DS_TAG, R.DATA, R.H5 = "original", R.ORIG_DATA, R.ORIG_H5
+
     envs = [(e.split(":", 1)[0], e.split(":", 1)[1]) for e in a.envs]
     labels = [l for l, _ in envs]
-    models = {"pro": R.PRO_MAX, "flash": R.FLASH_MAX}
-    sel = [models[m] for m in a.models.split(",")]
+    sel = [R.REGISTRY[m][0] if m in R.REGISTRY else m for m in a.models.split(",")]
     probs = [json.loads(l) for l in open(R.DATA)]
     tmp = R.ROOT / "eval_clean" / "_multienv_tmp"; tmp.mkdir(parents=True, exist_ok=True)
 
     for model in sel:
-        outdir = R.ROOT / "eval_clean" / "ds_runs" / a.run / f"cleaned_{model}" / "with_bg"
+        safe = model.replace("/", "__")
+        outdir = R.ROOT / "eval_clean" / "ds_runs" / a.run / f"{a.dataset}_{safe}" / a.bg
         tasks, order = [], {}
         for prob in probs:
             pid = str(prob["problem_id"]); cdir = outdir / pid
@@ -87,7 +95,7 @@ def main():
 
         def work(t):
             pid, sid, cum, tcs, cdir = t
-            sp = tmp / f".s_{model}_{sid}_{time.time_ns()}.py"
+            sp = tmp / f".s_{safe}_{sid}_{time.time_ns()}.py"
             sp.write_text(build_script(cum, tcs, sid))
             try:
                 r = {lab: run_under(py, sp) for lab, py in envs}

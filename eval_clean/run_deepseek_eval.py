@@ -13,6 +13,14 @@ Setup:
     python3 eval_clean/run_deepseek_eval.py
     # quick check first:   python3 eval_clean/run_deepseek_eval.py --only 58,73,22
 
+Original-vs-cleaned (before/after):
+    --dataset original grades against the PRISTINE upstream benchmark (text + h5, md5-pinned;
+    same 64 problems / 287 scored sub-steps as the cleaned release). Everything else — prompts
+    templates, timeouts, grading — is byte-identical, so the score difference isolates the
+    benchmark content. Run dirs get an 'original_' prefix (cleaned runs keep 'cleaned_').
+        python3 eval_clean/run_deepseek_eval.py --dataset original --run orig1 \
+            --model gpt-5.5 --background on --generate-only    # gen LOCAL (OpenRouter), grade on server
+
 Multi-version OR grading (robust to numpy/scipy API drift):
     Grading is output-based (np.allclose to gold), so a step's verdict shouldn't depend on
     which library version happens to expose the function name the model called (scipy 1.14
@@ -40,12 +48,19 @@ REASONING_EFFORT = "max"            # the "Max" in both names
 PROVIDERS = {
     "deepseek":   ("https://api.deepseek.com", "DEEPSEEK_API_KEY"),                                  # 官方
     "ali":        (os.environ.get("ALI_API_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"), "ALI_API_KEY"),  # 阿里云 DashScope
+    "ali-glm":    (os.environ.get("ALI_API_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"), "GLM_API_KEY"),  # 同 DashScope,独立 key(GLM 专用)
     "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),                            # LOCAL ONLY (remote region geo-blocked)
+    "ark":        (os.environ.get("ARK_API_URL", "https://ark.cn-beijing.volces.com/api/v3"), "ARK_API_KEY"),  # 火山方舟 (ByteDance Seed)
+    "meta":       (os.environ.get("META_API_URL", "https://api.meta.ai/v1"), "META_API_KEY"),        # Meta Model API (OpenAI-compatible)
+    "local":      (os.environ.get("LOCAL_API_URL", "http://localhost:8901/v1"), "LOCAL_API_KEY"),    # self-hosted vLLM (key optional)
 }
 # Model registry: --model <key> -> (api_slug, default_provider, default_reasoning_effort). The
 # provider + effort are inferred from the key (override effort with --reasoning-effort). The
 # OpenRouter entries are the frontier set we may benchmark via OpenRouter — run them LOCALLY only
 # (sichuan2's region is geo-blocked for OpenRouter; see memory scicode-openrouter-local-only).
+# --model also accepts a RAW slug containing '/' (e.g. 'vendor/brand-new-model'): it is sent to
+# OpenRouter as-is with effort=high — new models need no code change (override via --provider/
+# --reasoning-effort).
 REGISTRY = {
     "pro":          (PRO_MAX,                          "deepseek",   "max"),    # DeepSeek V4 Pro Max
     "flash":        (FLASH_MAX,                        "deepseek",   "max"),    # DeepSeek Flash Max
@@ -55,12 +70,38 @@ REGISTRY = {
     "gpt-5.5-pro":  ("openai/gpt-5.5-pro",             "openrouter", "high"),
     "opus-4.8":     ("anthropic/claude-opus-4.8",      "openrouter", "high"),
     "glm-5.2":      ("z-ai/glm-5.2",                   "openrouter", "high"),
+    # GLM-5.2 via 阿里云 DashScope (ALI_API_KEY): bare slug, thinking enabled via extra_body
+    # (see gen()), content-inspection disabled via header (see run_config). effort None — DashScope
+    # uses enable_thinking, not reasoning_effort.
+    "glm-5.2-ali":  ("glm-5.2",                        "ali-glm",    None),
+    # Muse Spark 1.1 = Meta Superintelligence Labs (2026-07-09), NOT on OpenRouter — direct Meta
+    # Model API (OpenAI-compatible chat completions). AA's headline score is at effort=xhigh.
+    "muse-spark":   ("muse-spark-1.1",                 "meta",       "xhigh"),
+    # Seed 2.1 Pro = ByteDance, 火山方舟 real model ID (dated). thinking is on by default; ARK may
+    # not take reasoning_effort (None = don't send; gen() also auto-drops it if rejected).
+    "seed-2.1-pro": ("doubao-seed-2-1-pro-260628",     "ark",        None),
+    # Self-hosted on sichuan2 GPU7 via vLLM (env verl_qwen35, port 8901, --reasoning-parser qwen3):
+    #   CUDA_VISIBLE_DEVICES=7 vllm serve /data1/model/Qwen3.6-35B-A3B \
+    #       --served-model-name qwen3.6-35b-a3b --port 8901 --max-model-len 65536 \
+    #       --gpu-memory-utilization 0.68 --reasoning-parser qwen3
+    "qwen3.6-35b":  ("qwen3.6-35b-a3b",                "local",      None),
+    # OUR OWN FINE-TUNE (not a paper model): keep its results out of the paper runs by using the
+    # dedicated run tag  --run bigbang-35b  -> ds_runs/bigbang-35b/  (see that dir's README).
+    #   CUDA_VISIBLE_DEVICES=6 vllm serve /data1/model/<checkpoint> \
+    #       --served-model-name bigbang-35b --port 8902 --max-model-len 65536 \
+    #       --gpu-memory-utilization 0.68 --reasoning-parser qwen3 \
+    #       --additional-config '{"gdn_prefill_backend": "triton"}'
+    # then: LOCAL_API_URL=http://localhost:8902/v1
+    "bigbang-35b":  ("bigbang-35b",                    "local",      None),
 }
 PROVIDER = "deepseek"               # set per selected model in main()
 BASE_URL, KEY_ENV = PROVIDERS[PROVIDER]
 # =============================================================================================
 
 MAX_TOKENS = None      # per-call output cap; None = API default. Set via --max-tokens.
+# Sampling params (None = endpoint/model default). Set via --temperature/--top-p/--top-k/--min-p.
+# top_k/min_p are vLLM extensions and go through extra_body; OpenAI-native params go in the call.
+TEMPERATURE = TOP_P = TOP_K = MIN_P = None
 VERBOSE_STEPS = False   # print one line per sub-step (default: only per-problem). Set via --verbose-steps.
 EFFORT_SUPPORTED = True # flips off (per run) if the endpoint rejects reasoning_effort -> retry without it.
 
@@ -93,35 +134,70 @@ SUBENV = {**os.environ, "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1",
 GENERATE_ONLY = False
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC  = ROOT / "SciCode" / "src"
+# Upstream SciCode files: prefer a local SciCode/ clone at the repo root when present,
+# else fall back to the byte-identical vendored copies (eval_clean/vendor/, see its README).
+SRC  = (ROOT / "SciCode" / "src") if (ROOT / "SciCode" / "src").exists() \
+       else (ROOT / "eval_clean" / "vendor")
+SCICODE_DATA = (ROOT / "SciCode" / "eval" / "data") if (ROOT / "SciCode" / "eval" / "data").exists() \
+       else (ROOT / "eval_clean" / "vendor" / "eval_data")
 H5   = str(ROOT / "scicode_verified" / "test_data_cleaned.h5")   # verified cleaned dataset
 DATA = ROOT / "scicode_verified" / "problems_test.jsonl"
 MANIFEST = ROOT / "scicode_verified" / "manifest.json"
 
+# ---- --dataset original: the UNCLEANED upstream benchmark, for before/after comparison ----
+# Same 64 problems / same 287 scored sub-steps as the cleaned release (problem 2 excluded on
+# both sides: its spec fixes no unique answer, so no verifiable gold exists). Text is the
+# pristine upstream jsonl (verified identical per-problem to the upstream test split); targets
+# are the pristine upstream h5. Only the DATA INPUT differs from a cleaned run — harness,
+# templates, timeouts, and grading are byte-identical, so original-vs-cleaned isolates the
+# benchmark content itself.
+DS_TAG    = "cleaned"                                              # set by --dataset in main()
+ORIG_DATA = ROOT / "eval_clean" / "data_original" / "problems_test.jsonl"
+ORIG_H5   = str(ROOT / "SciCode" / "eval" / "data" / "test_data.h5")
+ORIG_JSONL_MD5 = "d2d1ae6032a4acff2e728f98b2d089cd"   # pinned: pristine upstream text (64 test problems)
+ORIG_H5_MD5    = "96d5d815aee54434deba01eb27646f22"   # pinned: pristine upstream test_data.h5
+
+def _md5f(p):
+    import hashlib
+    h = hashlib.md5()
+    with open(p, "rb") as f:
+        for c in iter(lambda: f.read(1 << 20), b""): h.update(c)
+    return h.hexdigest()
+
 def _check_manifest():
     """Refuse to run on stale data: assert jsonl/h5 md5 == manifest (verify-with-human
     invariant 5). Set ALLOW_UNVERIFIED_DATA=1 to bypass (not recommended)."""
-    import hashlib, json as _json
+    import json as _json
     if os.environ.get("ALLOW_UNVERIFIED_DATA") == "1":
         print("WARNING: skipping manifest data check (ALLOW_UNVERIFIED_DATA=1)"); return
     if not MANIFEST.exists():
         sys.exit(f"FATAL: {MANIFEST} missing — run tools/assemble.py to generate it.")
     man = _json.loads(MANIFEST.read_text())
-    def md5f(p):
-        h = hashlib.md5()
-        with open(p, "rb") as f:
-            for c in iter(lambda: f.read(1 << 20), b""): h.update(c)
-        return h.hexdigest()
-    if md5f(DATA) != man.get("problems_test_jsonl_md5"):
+    if _md5f(DATA) != man.get("problems_test_jsonl_md5"):
         sys.exit(f"FATAL: {DATA} md5 != manifest — data is stale/edited. Run tools/assemble.py + tools/verify.py.")
-    if man.get("h5_md5") and os.path.exists(H5) and md5f(H5) != man["h5_md5"]:
+    if man.get("h5_md5") and os.path.exists(H5) and _md5f(H5) != man["h5_md5"]:
         sys.exit(f"FATAL: {H5} md5 != manifest — h5 is stale. Rebuild via eval_clean/build_clean_h5.py.")
     print(f"manifest OK: dataset {man.get('version')} ({man.get('n_problems')} problems), data md5 verified.")
+
+def _check_original():
+    """Same stale-data discipline for the ORIGINAL dataset: both files must match the pinned
+    pristine-upstream md5s (guards against grading 'original' runs on an edited/partial copy)."""
+    if os.environ.get("ALLOW_UNVERIFIED_DATA") == "1":
+        print("WARNING: skipping original-data md5 check (ALLOW_UNVERIFIED_DATA=1)"); return
+    if not ORIG_DATA.exists():
+        sys.exit(f"FATAL: {ORIG_DATA} missing (tracked in git — pull/rsync the repo).")
+    if _md5f(ORIG_DATA) != ORIG_JSONL_MD5:
+        sys.exit(f"FATAL: {ORIG_DATA} md5 != pinned pristine-upstream value {ORIG_JSONL_MD5}.")
+    if not os.path.exists(ORIG_H5):
+        sys.exit(f"FATAL: {ORIG_H5} missing — the original test_data.h5 (clone SciCode / hfd.sh, see README).")
+    if _md5f(ORIG_H5) != ORIG_H5_MD5:
+        sys.exit(f"FATAL: {ORIG_H5} md5 != pinned pristine-upstream value {ORIG_H5_MD5}.")
+    print("original dataset OK: pristine upstream jsonl + h5 md5 verified (64 problems).")
 # Match the OFFICIAL SciCode harness: WITH background -> multistep_template (background is provided);
 # WITHOUT background -> background_comment_template (the model must first generate the scientific
 # background as a '# Background: ' comment, then code). Selected per-config in build_prompt.
-TEMPLATE_BG   = (ROOT / "SciCode" / "eval" / "data" / "multistep_template.txt").read_text()
-TEMPLATE_NOBG = (ROOT / "SciCode" / "eval" / "data" / "background_comment_template.txt").read_text()
+TEMPLATE_BG   = (SCICODE_DATA / "multistep_template.txt").read_text()
+TEMPLATE_NOBG = (SCICODE_DATA / "background_comment_template.txt").read_text()
 SKIP = {("13", 5), ("62", 0), ("76", 2)}   # steps the official harness skips
 
 def extract_code(resp):
@@ -162,6 +238,14 @@ def gen(client, prompt, model, retries=8):
                       stream=True, stream_options={"include_usage": True}, **extra)
             if REASONING_EFFORT and EFFORT_SUPPORTED:   # some endpoints/models don't take reasoning_effort
                 kw["reasoning_effort"] = REASONING_EFFORT
+            if TEMPERATURE is not None: kw["temperature"] = TEMPERATURE
+            if TOP_P is not None: kw["top_p"] = TOP_P
+            eb = {}
+            if PROVIDER.startswith("ali"):              # DashScope deep-thinking switch
+                eb["enable_thinking"] = True
+            if TOP_K is not None: eb["top_k"] = TOP_K
+            if MIN_P is not None: eb["min_p"] = MIN_P
+            if eb: kw["extra_body"] = eb
             stream = client.chat.completions.create(**kw)
             content, reasoning, usage, finish = [], [], None, None
             for chunk in stream:
@@ -222,9 +306,9 @@ def run_problem(prob, client, model, with_bg, outdir):
         sid = sub["step_number"]; cf = cdir / f"{sid}.code.py"
         if (pid, k) in SKIP:
             # Match official harness: these steps (13.6/62.1/76.3) are NEVER generated or scored.
-            # Inject the GOLD reference code (SciCode/eval/data/<sid>.txt) so downstream cumulative
+            # Inject the GOLD reference code (<upstream eval data>/<sid>.txt) so downstream cumulative
             # code builds on the correct version, not a model guess.
-            gold = (ROOT / "SciCode" / "eval" / "data" / f"{sid}.txt").read_text()
+            gold = (SCICODE_DATA / f"{sid}.txt").read_text()
             code = re.sub(r"^\s*(import .*|from .*\s+import\s+.*)", "", gold, flags=re.MULTILINE)
             cf.write_text(code)
             prev.append(code); cum += "\n\n" + code
@@ -242,7 +326,10 @@ def run_problem(prob, client, model, with_bg, outdir):
             # full generation trajectory for inspection / re-scoring
             (cdir / f"{sid}.raw.json").write_text(json.dumps({
                 "step_id": sid, "model": model, "with_background": with_bg,
-                "reasoning_effort": REASONING_EFFORT, "prompt": prompt,
+                "reasoning_effort": REASONING_EFFORT,
+                "sampling": {"temperature": TEMPERATURE, "top_p": TOP_P,
+                             "top_k": TOP_K, "min_p": MIN_P, "max_tokens": MAX_TOKENS},
+                "prompt": prompt,
                 "response": resp["content"], "reasoning_content": resp["reasoning_content"],
                 "finish_reason": resp["finish_reason"], "usage": resp["usage"],
                 "extracted_code": code}, indent=2, ensure_ascii=False))
@@ -287,13 +374,17 @@ def run_config(model, with_bg, probs, workers, run_tag):
         # Only GENERATION calls the API: a step that still needs generating will error clearly.
         print(f"  note: {KEY_ENV} not set — OK for grading cached code (no API calls); any step that "
               f"still needs GENERATION will fail.", flush=True)
-    hdrs = ({"HTTP-Referer": "https://github.com/flyingwagner/scicode-verified", "X-Title": "scicode-verified"}
-            if PROVIDER == "openrouter" else {})
+    if PROVIDER == "openrouter":
+        hdrs = {"HTTP-Referer": "https://github.com/flyingwagner/scicode-verified", "X-Title": "scicode-verified"}
+    elif PROVIDER.startswith("ali"):   # disable DashScope 绿网 content inspection (science prompts false-positive)
+        hdrs = {"X-DashScope-DataInspection": json.dumps({"input": "disable", "output": "disable"})}
+    else:
+        hdrs = {}
     client = OpenAI(api_key=key or "no-key-grading-only", base_url=BASE_URL, default_headers=hdrs)
     safe = model.replace("/", "__")   # OpenRouter slugs contain '/'; keep the run dir flat
-    outdir = ROOT / "eval_clean" / "ds_runs" / run_tag / f"cleaned_{safe}" / ("with_bg" if with_bg else "no_bg")
+    outdir = ROOT / "eval_clean" / "ds_runs" / run_tag / f"{DS_TAG}_{safe}" / ("with_bg" if with_bg else "no_bg")
     outdir.mkdir(parents=True, exist_ok=True)
-    label = f"[{run_tag}] {PROVIDER}:{model} {'WITH' if with_bg else 'WITHOUT'} background"
+    label = f"[{run_tag}|{DS_TAG}] {PROVIDER}:{model} {'WITH' if with_bg else 'WITHOUT'} background"
     print(f"\n=== {label} : {len(probs)} problems ===")
     results = []; total = len(probs)
     # LPT scheduling: submit longest problems first so the big ones overlap with the many short
@@ -340,7 +431,7 @@ def run_config(model, with_bg, probs, workers, run_tag):
                 print(f"      passed-in[{'+'.join(sorted(s)) if s else 'NONE'}]: {c}")
     ts = sum(r["n_steps_scored"] for r in results); to = sum(r["n_steps_ok"] for r in results)
     po = sum(r["problem_correct"] for r in results)
-    summary = {"run_tag": run_tag, "model": model, "with_background": with_bg,
+    summary = {"run_tag": run_tag, "dataset": DS_TAG, "model": model, "with_background": with_bg,
                "reasoning_effort": REASONING_EFFORT, "max_tokens": MAX_TOKENS,
                "problems": len(results), "problems_correct": po, "steps_total": ts,
                "steps_correct": to, "step_accuracy": round(to / ts, 4) if ts else 0,
@@ -358,15 +449,25 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", default="", help="comma-separated problem ids for a quick check")
     ap.add_argument("--workers", type=int, default=4, help="problems run in parallel within a config")
-    ap.add_argument("--model", choices=list(REGISTRY), default=None,
+    ap.add_argument("--model", default=None,
                     help="model key from REGISTRY (pro/flash=DeepSeek; gemini-flash/gemini-pro/gpt-5.5/"
-                         "gpt-5.5-pro/opus-4.8=OpenRouter, LOCAL ONLY). Default: both DeepSeek (pro+flash).")
+                         "gpt-5.5-pro/opus-4.8/glm-5.2/muse-spark/seed-2.1-pro=OpenRouter, LOCAL ONLY), "
+                         "or a RAW slug containing '/' (sent to OpenRouter as-is, effort=high). "
+                         "Default: both DeepSeek (pro+flash).")
+    ap.add_argument("--dataset", choices=["cleaned", "original"], default="cleaned",
+                    help="which benchmark DATA to run: 'cleaned' (default; scicode_verified/, manifest-"
+                         "checked) or 'original' (pristine upstream text + h5, md5-pinned; same 64 "
+                         "problems). Harness/templates/grading identical — only the data input differs.")
     ap.add_argument("--background", choices=["on", "off"], default=None,
                     help="only with/without background (default: both)")
     ap.add_argument("--run", default="run1",
                     help="run tag -> ds_runs/<run>/... ; SAME tag resumes & reuses cached gens, "
                          "use a NEW tag for an independent repeat run (no overwrite)")
     ap.add_argument("--max-tokens", type=int, default=None, help="per-call output cap (default: API default)")
+    ap.add_argument("--temperature", type=float, default=None, help="sampling temperature (default: endpoint/model default)")
+    ap.add_argument("--top-p", type=float, default=None, help="nucleus sampling top_p")
+    ap.add_argument("--top-k", type=int, default=None, help="top_k (vLLM extension, via extra_body)")
+    ap.add_argument("--min-p", type=float, default=None, help="min_p (vLLM extension, via extra_body)")
     ap.add_argument("--reasoning-effort", default=None,
                     help="override the model's default reasoning effort (e.g. low/medium/high/max/xhigh). "
                          "Default: per-model from REGISTRY (DeepSeek=max, OpenRouter=high).")
@@ -388,8 +489,13 @@ def main():
                          "(grading is the slow part). Grade later with the SAME --run tag (cached gens are "
                          "reused) or via eval_clean/regrade_multienv.py.")
     a = ap.parse_args()
-    _check_manifest()   # refuse to run on stale/edited data (verify-with-human invariant 5)
-    global MAX_TOKENS, VERBOSE_STEPS, PROVIDER, BASE_URL, KEY_ENV, GRADING_ENVS, FULL_ENVS, REASONING_EFFORT, EFFORT_SUPPORTED, GENERATE_ONLY
+    global MAX_TOKENS, VERBOSE_STEPS, PROVIDER, BASE_URL, KEY_ENV, GRADING_ENVS, FULL_ENVS, REASONING_EFFORT, EFFORT_SUPPORTED, GENERATE_ONLY, DS_TAG, DATA, H5, TEMPERATURE, TOP_P, TOP_K, MIN_P
+    TEMPERATURE, TOP_P, TOP_K, MIN_P = a.temperature, a.top_p, a.top_k, a.min_p
+    if a.dataset == "original":
+        DS_TAG, DATA, H5 = "original", ORIG_DATA, ORIG_H5
+        _check_original()   # refuse to run on a non-pristine copy of the upstream data
+    else:
+        _check_manifest()   # refuse to run on stale/edited data (verify-with-human invariant 5)
     MAX_TOKENS = a.max_tokens
     VERBOSE_STEPS = a.verbose_steps
     FULL_ENVS = a.full_envs
@@ -420,14 +526,25 @@ def main():
     sel_bg = {"on": [True], "off": [False]}.get(a.background, [False, True])
     summaries = []
     for key in sel_keys:
-        slug, prov, effort = REGISTRY[key]
+        if key in REGISTRY:
+            slug, prov, effort = REGISTRY[key]
+        elif a.provider:                       # explicit endpoint: any slug (e.g. a self-hosted checkpoint)
+            slug, prov, effort = key, a.provider, None
+        elif "/" in key:                       # raw slug passthrough: new models need no code change
+            slug, prov, effort = key, "openrouter", "high"
+        else:
+            sys.exit(f"--model {key!r}: not a REGISTRY key ({', '.join(REGISTRY)}), not a raw "
+                     f"'vendor/model' slug, and no --provider given.")
+        if slug.startswith("FIXME/"):
+            sys.exit(f"--model {key!r}: REGISTRY slug is a placeholder ({slug}) — fill in the real "
+                     f"slug (or pass the raw 'vendor/model' slug directly).")
         PROVIDER = a.provider or prov                       # provider inferred from the model, overridable
         BASE_URL, KEY_ENV = PROVIDERS[PROVIDER]
         REASONING_EFFORT = a.reasoning_effort or effort     # effort from the model, overridable
         EFFORT_SUPPORTED = True                             # reset the per-run fallback flag for each model
         for with_bg in sel_bg:
             summaries.append(run_config(slug, with_bg, probs, a.workers, a.run))
-    print("\n==================== COMBINED SUMMARY (cleaned test set) ====================")
+    print(f"\n==================== COMBINED SUMMARY ({DS_TAG} test set) ====================")
     if GENERATE_ONLY:
         print(f"{'model':<24}{'background':<12}{'generated steps':>18}{'problems':>11}")
         for s in summaries:
@@ -440,7 +557,7 @@ def main():
             print(f"{s['model']:<24}{'with' if s['with_background'] else 'without':<12}"
                   f"{str(s['steps_correct'])+'/'+str(s['steps_total']):>12}{s['step_accuracy']:>10}"
                   f"{str(s['problems_correct'])+'/'+str(s['problems']):>11}{s['problem_accuracy']:>10}")
-    print(f"\nper-problem detail + trajectories: eval_clean/ds_runs/{a.run}/cleaned_<model>/<bg>/"
+    print(f"\nper-problem detail + trajectories: eval_clean/ds_runs/{a.run}/{DS_TAG}_<model>/<bg>/"
           "  (results.json, <pid>/<step>.raw.json)")
 
 if __name__ == "__main__":

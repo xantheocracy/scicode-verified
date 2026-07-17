@@ -21,6 +21,8 @@ eval_clean/                # ★ 评测脚本
   build_clean_h5.py        #   扁平 build:原始 h5 + targets/ → 清洗版 h5(一趟,无层层嵌套)
   regrade_multienv.py      #   多环境(sci2024 + cp312)OR 打分,鲁棒于 numpy/scipy 漂移
   run_cleaned_eval.sh      #   用官方 inspect_ai 跑 cleaned/original 两种数据集
+  vendor/                  #   上游 SciCode 的最小依赖件(模板/skip 步 gold/h5 读取模块,字节原样,Apache-2.0)
+analysis/                  # ★ 论文统计的机器生成产物(defect 台账→逐步清单、翻转集、bootstrap CI)
 tools/                     # ★ 释放闸门
   assemble.py              #   SSOT → problems_test.jsonl + 刷新 manifest.json
   verify.py                #   双向 verify gate(见下)
@@ -28,7 +30,10 @@ ledger/                    #   决策账本:R3–R7.jsonl(逐条改动)+ BUG_*.m
 CLEANING_LOG.md            #   清洗全过程的可读日志(方法 / 缺陷统计 / 分轮)
 ```
 
-> 上游 `SciCode/`(基准代码 + 1GB 原始 `test_data.h5`)**不在本仓库**,仅重建 h5 时需要,单独 clone(见下)。
+> 上游 `SciCode/`(基准代码 + 1GB 原始 `test_data.h5`)**不在本仓库,日常评测也不需要**:
+> harness 所需的少量上游文件已按字节原样收录在 `eval_clean/vendor/`(优先使用本地克隆,缺省回落 vendor)。
+> 只有两件事仍需上游件:从原始 h5 **重建**清洗版 h5(见下),以及复现论文的 *before*(original)侧评测
+> (需原始 `test_data.h5`,md5 `96d5d815aee54434deba01eb27646f22`;**清洗版 h5 才是本基准的标准判分数据**)。
 
 ## 取得清洗版数据
 

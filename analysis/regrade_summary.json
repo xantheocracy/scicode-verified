@@ -1,0 +1,102 @@
+{
+ "openai__gpt-5.5": {
+  "orig1": [
+   160,
+   13
+  ],
+  "crossgrade": [
+   200,
+   25
+  ],
+  "grading_layer_step_gain": 40,
+  "grading_layer_problem_gain": 12,
+  "run4": [
+   273,
+   58
+  ],
+  "total_step_gain": 113,
+  "grading_share": 0.354
+ },
+ "google__gemini-3.5-flash": {
+  "orig1": [
+   165,
+   11
+  ],
+  "crossgrade": [
+   196,
+   24
+  ],
+  "grading_layer_step_gain": 31,
+  "grading_layer_problem_gain": 13,
+  "run4": [
+   279,
+   56
+  ],
+  "total_step_gain": 114,
+  "grading_share": 0.272
+ },
+ "anthropic__claude-opus-4.8": {
+  "orig1": [
+   152,
+   16
+  ],
+  "crossgrade": [
+   175,
+   20
+  ],
+  "grading_layer_step_gain": 23,
+  "grading_layer_problem_gain": 4,
+  "run4": [
+   265,
+   50
+  ],
+  "total_step_gain": 113,
+  "grading_share": 0.204
+ },
+ "glm-5.2": {
+  "orig1": [
+   144,
+   10
+  ],
+  "crossgrade": [
+   168,
+   19
+  ],
+  "grading_layer_step_gain": 24,
+  "grading_layer_problem_gain": 9,
+  "run4": [
+   242,
+   45
+  ],
+  "total_step_gain": 98,
+  "grading_share": 0.245
+ },
+ "deepseek-v4-pro": {
+  "orig1": [
+   144,
+   11
+  ],
+  "crossgrade": [
+   167,
+   21
+  ],
+  "grading_layer_step_gain": 23,
+  "grading_layer_problem_gain": 10
+ },
+ "deepseek-v4-flash": {
+  "orig1": [
+   130,
+   6
+  ],
+  "crossgrade": [
+   160,
+   19
+  ],
+  "grading_layer_step_gain": 30,
+  "grading_layer_problem_gain": 13
+ },
+ "_meta": {
+  "note": "fixed-output regrade: orig1 cached generations re-scored against cleaned tests+gold (run tag regrade1); grading_share = grading-layer step gain / total before-after step gain",
+  "date": "2026-07-16"
+ }
+}
