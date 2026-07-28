@@ -2,93 +2,94 @@
 
 # SciCode-Verified
 
-### A human-verified benchmark for scientific code generation
+**A human-verified benchmark for scientific code generation**
+
+[Dataset](https://github.com/flyingwagner/scicode-verified/releases/tag/data) ·
+[Run the benchmark](#run-it) ·
+[Evaluation protocol](#evaluation-protocol) ·
+[Audit trail](CLEANING_LOG.md) ·
+[Upstream SciCode](https://github.com/scicode-bench/SciCode)
 
 [![Dataset](https://img.shields.io/badge/dataset-v2-4c6ef5)](https://github.com/flyingwagner/scicode-verified/releases/tag/data)
 [![Problems](https://img.shields.io/badge/problems-64-7950f2)](scicode_verified/problems_test.jsonl)
 [![Scored subproblems](https://img.shields.io/badge/scored_subproblems-287-9c36b5)](scicode_verified/manifest.json)
 [![License](https://img.shields.io/badge/license-Apache--2.0-2f9e44)](eval_clean/vendor/LICENSE)
 
-[Download](https://github.com/flyingwagner/scicode-verified/releases/tag/data) ·
-[Quick start](#quick-start) ·
-[Evaluation protocol](#evaluation-protocol) ·
-[Audit trail](#audit-trail) ·
-[Upstream SciCode](https://github.com/scicode-bench/SciCode)
-
 </div>
 
+<img src="assets/scicode-verified-hero.png" width="100%" alt="Scientific signals and code converging into a verified, orderly benchmark">
+
 SciCode-Verified is an independent, human-in-the-loop correction of the
-[SciCode](https://github.com/scicode-bench/SciCode) test benchmark. It keeps the scientific
-tasks difficult while fixing contradictions, missing conventions, incorrect frozen targets,
-non-deterministic tests, and other defects that can mis-score a valid solution.
+[SciCode](https://github.com/scicode-bench/SciCode) test benchmark. It preserves the scientific
+reasoning challenge while repairing contradictions, missing conventions, incorrect frozen
+targets, non-deterministic tests, and other defects that can reject valid solutions.
 
-The release contains the same **64 evaluable test problems and 287 scored subproblems** used in
-our matched before/after experiments. Problem 2 from the original 65-problem test split is
-excluded because its specification does not determine a unique verifiable answer.
+<table>
+  <tr>
+    <td align="center"><strong>264</strong><br>verified corrections</td>
+    <td align="center"><strong>63 / 64</strong><br>problems changed</td>
+    <td align="center"><strong>192 / 264</strong><br>defects that reject correct code</td>
+    <td align="center"><strong>71 / 287</strong><br>subproblems with faulty tests or gold</td>
+  </tr>
+</table>
 
-## Why verification matters
+## The benchmark was measuring its own defects
 
-| Release-level finding | Count |
-|---|---:|
-| Confirmed defects corrected | **264** |
-| Problems changed | **63 / 64** |
-| Defects that reject a correct solution | **192 / 264** |
-| Scored subproblems touched by score-suppressing defects | **155 / 287** |
-| Subproblems with incorrect tests or frozen gold | **71 / 287** |
-
-SciCode scores a main problem only when every scored subproblem passes. A single defective
+SciCode scores a whole problem only when every scored subproblem passes. One defective
 subproblem can therefore erase an otherwise correct multi-step solution.
 
+<img src="assets/before-after.png" width="100%" alt="Original and verified SciCode scores for eleven models">
+
 Across the completed matched, with-background evaluations as of **2026-07-28**, changing only
-the benchmark data moves the observed frontier from **45.3–60.6% to 83.7–98.3%** on subproblems
-and from **9.4–26.6% to 68.8–92.2%** on whole problems. The evaluation harness, model outputs
+the benchmark data moves the observed frontier from **45.3–60.6% to 83.7–98.3%** on
+subproblems, and from **9.4–26.6% to 68.8–92.2%** on whole problems. The harness, output
 protocol, and pass@1 setting are held fixed.
 
-> **SciCode-Verified is not an easier rewrite.** Corrections specify only what is required to
-> make each task well posed and its grading faithful. Weak tests are tightened; scientific
+> SciCode-Verified is not an easier rewrite. Corrections state what is required to make each
+> task well posed and its grading faithful. Weak tests are tightened; the scientific
 > derivations and algorithms remain the model's responsibility.
 
-## Quick start
+## Why the original leaderboard looked compressed
 
-### 1. Clone and install the runtime
+<img src="assets/leaderboard-compression.png" width="100%" alt="Original SciCode public leaderboard showing a compressed frontier">
+
+On the original public benchmark, the frontier sits in a narrow 53–60% band while the
+280-configuration average is 42.9%. SciCode-Verified reveals that much of this apparent
+compression comes from shared benchmark defects rather than shared model capability.
+
+## From audit to release
+
+<img src="assets/verification-pipeline.svg" width="100%" alt="Audit, trace, rebuild, and verify pipeline">
+
+Every accepted correction is recorded in a ledger, propagated from a single source of truth,
+and checked against the released JSONL, HDF5, and manifest. See
+[`CLEANING_LOG.md`](CLEANING_LOG.md) for the complete audit and
+[`analysis/README.md`](analysis/README.md) for release statistics.
+
+## Run it
+
+Clone the repository and install the small runtime:
 
 ```bash
 git clone https://github.com/flyingwagner/scicode-verified.git
 cd scicode-verified
-
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install openai h5py numpy scipy matplotlib sympy
+python -m pip install -U pip openai h5py numpy scipy matplotlib sympy
 ```
 
-### 2. Download the released grading data
+Download the released grading targets and verify their checksum:
 
 ```bash
-gh release download data \
-  --repo flyingwagner/scicode-verified \
-  --dir scicode_verified
-
+gh release download data --repo flyingwagner/scicode-verified --dir scicode_verified
 md5sum scicode_verified/test_data_cleaned.h5
-# expected: 2b41a7df40ddc23ce651ec05b8ecb6f8
+# 2b41a7df40ddc23ce651ec05b8ecb6f8
 ```
 
-The release contains:
-
-| Asset | Purpose |
-|---|---|
-| `problems_test.jsonl` | Canonical prompts, steps, function headers, and tests |
-| `test_data_cleaned.h5` | Frozen grading targets |
-| `manifest.json` | Version and content hashes used by the harness |
-
-The evaluator checks the JSONL and HDF5 files against `manifest.json` before running and exits on
-a mismatch.
-
-### 3. Run a one-problem smoke test
+Run a one-problem smoke test:
 
 ```bash
 export DEEPSEEK_API_KEY="..."
-
 python eval_clean/run_deepseek_eval.py \
   --model pro \
   --dataset cleaned \
@@ -98,113 +99,46 @@ python eval_clean/run_deepseek_eval.py \
   --workers 1
 ```
 
-Runs are resumable. Generated code, raw responses, per-step scores, and the aggregate
-`results.json` are written under:
+Runs are resumable. Generated code, raw responses, per-step scores, and aggregate results are
+saved under `eval_clean/ds_runs/`. OpenRouter models work with the same entry point by setting
+`OPENROUTER_API_KEY` and passing the raw model slug to `--model`.
 
-```text
-eval_clean/ds_runs/<run>/<dataset>_<model>/<with_bg|no_bg>/
-```
-
-For an OpenRouter model, pass its raw slug:
-
-```bash
-export OPENROUTER_API_KEY="..."
-
-python eval_clean/run_deepseek_eval.py \
-  --model vendor/model \
-  --dataset cleaned \
-  --background on \
-  --run my-model
-```
-
-See [`eval_clean/README.md`](eval_clean/README.md) for generation-only runs, cached re-grading,
-original-vs-verified comparisons, and provider configuration.
+For generation-only runs, cached re-grading, provider configuration, and original-versus-
+verified comparisons, see [`eval_clean/README.md`](eval_clean/README.md).
 
 ## Evaluation protocol
 
-| Choice | Canonical setting |
+| | Canonical setting |
 |---|---|
-| Unit of evaluation | 64 main problems / 287 scored subproblems |
+| Evaluation set | 64 main problems / 287 scored subproblems |
 | Sampling | pass@1 |
-| Main-problem score | pass only if every scored subproblem passes |
-| Context conditions | with background and without background are reported separately |
-| Step construction | cumulative: step *k* receives code from steps `1..k-1` |
+| Whole-problem score | Pass only if every scored subproblem passes |
+| Context | With and without background reported separately |
+| Step construction | Cumulative: step *k* receives code from steps `1..k-1` |
 | Timeout | 1,800 seconds per step and environment |
-| Scientific Python drift | pass if correct in either pinned 2024-era or 2025-era environment |
-| Integrity | dataset hashes must match `scicode_verified/manifest.json` |
+| Environment drift | Pass if correct in either pinned 2024-era or 2025-era scientific Python |
+| Integrity | Dataset hashes must match `scicode_verified/manifest.json` |
 
-For the paper-compatible two-environment grading protocol, pass both interpreters explicitly:
+The release excludes original test problem 2 because its specification does not determine a
+unique, verifiable answer. The remaining 64 problems are the exact matched set used in the
+before/after evaluation above.
 
-```bash
-python eval_clean/run_deepseek_eval.py \
-  --model vendor/model \
-  --background on \
-  --run reproducible-run \
-  --envs \
-    2024:/path/to/scipy-2024/bin/python \
-    2025:/path/to/scipy-2025/bin/python \
-  --full-envs
-```
+## Repository map
 
-`--generate-only` can separate API generation from CPU-heavy grading. Re-run the same command
-without `--generate-only`; cached generations are reused and no model API calls are made.
-
-## What is in this repository
-
-| Path | Role |
+| Path | What it contains |
 |---|---|
-| [`scicode_verified/`](scicode_verified/) | Released dataset, source-of-truth problem files, target patches, and manifest |
+| [`scicode_verified/`](scicode_verified/) | Released benchmark, source problems, target patches, and manifest |
 | [`eval_clean/`](eval_clean/) | Portable generation, scoring, and re-grading harness |
 | [`analysis/`](analysis/) | Machine-readable defect and evaluation analyses |
 | [`ledger/`](ledger/) | Per-change provenance and focused defect investigations |
 | [`tools/`](tools/) | Dataset assembly and release verification gate |
-| [`CLEANING_LOG.md`](CLEANING_LOG.md) | Full audit method, rounds, taxonomy, and release history |
 
 The large `test_data_cleaned.h5` is distributed through
 [GitHub Releases](https://github.com/flyingwagner/scicode-verified/releases/tag/data), not Git.
-Minimal byte-identical upstream components required by the evaluator are vendored under
-[`eval_clean/vendor/`](eval_clean/vendor/).
+The evaluator verifies its hash before running.
 
-## Audit trail
-
-The release follows a **source → derive → verify → publish** discipline:
-
-1. Edit only `scicode_verified/problems/<id>.json` and
-   `scicode_verified/targets/<id>.json`.
-2. Record each accepted correction in `ledger/<round>.jsonl`.
-3. Regenerate `problems_test.jsonl` and `manifest.json` with `tools/assemble.py`.
-4. Run the bidirectional gate:
-
-```bash
-python tools/assemble.py
-python tools/verify.py --scope full --round <ROUND>
-```
-
-The gate checks that every recorded decision reached the release, every release change has a
-record, derived files match their source, prompt-only rounds do not alter targets, and all
-executable fields parse.
-
-For the release-specific statistics, start with [`analysis/README.md`](analysis/README.md).
-For the complete 80-problem audit history, see [`CLEANING_LOG.md`](CLEANING_LOG.md).
-
-## Rebuilding from upstream
-
-Normal evaluation does **not** require an upstream SciCode checkout. Rebuilding the corrected
-HDF5 or reproducing the original-benchmark side does:
-
-```bash
-git clone https://github.com/scicode-bench/SciCode.git SciCode
-python eval_clean/build_clean_h5.py
-```
-
-The rebuilt file must match `manifest.json`:
-
-```text
-2b41a7df40ddc23ce651ec05b8ecb6f8  test_data_cleaned.h5
-```
-
-## Attribution and license
+## Attribution
 
 SciCode-Verified is derived from SciCode and redistributed under the Apache License 2.0. The
-vendored upstream notice and license are in [`eval_clean/vendor/`](eval_clean/vendor/). If you use
-this release, please cite both the original SciCode benchmark and SciCode-Verified.
+vendored upstream notice and license are in [`eval_clean/vendor/`](eval_clean/vendor/). If you
+use this release, please cite both the original SciCode benchmark and SciCode-Verified.
