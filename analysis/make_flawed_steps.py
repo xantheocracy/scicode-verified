@@ -2,7 +2,7 @@
 """Materialize the flawed-subproblem list from the defect ledger.
 
 Counting rule (deterministic, no judgment calls):
-- Suppressor defects = direction == 'too-strict/wrong' in taxonomy/defects.json.
+- Suppressor defects = direction == 'too-strict/wrong' in analysis/defects.json.
 - A defect's step footprint = every step id it names, parsed from
   (a) the leading "P.S" in its own `step` field, and
   (b) any "step P.S" / "(P.S)" / "targets.P.S" reference inside `fields_involved`.
@@ -12,15 +12,16 @@ Counting rule (deterministic, no judgment calls):
 - Layer "grading" : step is named by a suppressor defect at least one of whose
   fields touches the grading surface (test_cases / general_tests / target* / gold).
 - Universe = the 287 scored steps of the 64 released problems (problem 2 excluded),
-  taken from a run4 results.json. Referenced steps outside the universe are
+  derived directly from the released problems_test.jsonl. Referenced steps outside the universe are
   reported as anomalies and excluded from percentages.
 """
 import json, re, collections, pathlib
 
-ROOT = pathlib.Path('/home/hsh/code/ML/SciCode_refine')
-DEFECTS = ROOT / 'paper/analysis/taxonomy/defects.json'
-UNIVERSE_FROM = ROOT / 'eval_clean/ds_runs/run4/cleaned_qwen3.6-35b-a3b/with_bg/results.json'
-OUT = ROOT / 'paper/analysis/flawed_steps.json'
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+DEFECTS = ROOT / 'analysis/defects.json'
+RELEASE = ROOT / 'scicode_verified/problems_test.jsonl'
+OUT = ROOT / 'analysis/flawed_steps.json'
+SKIPPED_STEPS = {'13.6', '62.1', '76.3'}
 
 step_pat = re.compile(r'step (\d+\.\d+)|\((\d+\.\d+)\)|targets\.(\d+\.\d+)')
 lead_pat = re.compile(r'^(\d+\.\d+)')
@@ -34,9 +35,12 @@ if isinstance(defects, dict):
     defects = defects['defects']
 supp = [d for d in defects if d['direction'] == 'too-strict/wrong']
 
-res = json.load(open(UNIVERSE_FROM))
-universe = {s for r in res['results'] for s in r['steps']}
-universe -= {'13.6', '62.1', '76.3'}   # steps the official harness skips (SKIP in run_deepseek_eval.py)
+problems = [json.loads(line) for line in RELEASE.read_text().splitlines() if line.strip()]
+universe = {
+    str(step['step_number'])
+    for problem in problems
+    for step in problem['sub_steps']
+} - SKIPPED_STEPS
 uni_problems = {s.split('.')[0] for s in universe}
 assert len(universe) == 287 and len(uni_problems) == 64, (len(universe), len(uni_problems))
 

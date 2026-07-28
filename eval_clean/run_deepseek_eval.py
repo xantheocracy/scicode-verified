@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
-"""Evaluate DeepSeek V4 Pro Max and Flash Max on the CLEANED SciCode test set.
+"""Evaluate language models on SciCode-Verified.
 
-Runs exactly the four target configurations:
-    {Pro Max, Flash Max}  x  {without background, with background}
-faithful to the official SciCode prompt + cumulative scoring, scored against the cleaned h5.
-
-"Pro Max" / "Flash Max" = models deepseek-v4-pro / deepseek-v4-flash at reasoning_effort="max"
-(both verified against the live API; valid efforts are low|medium|high|max|xhigh).
+The runner is faithful to the official SciCode prompt construction and cumulative scoring, while
+adding manifest verification, resumable per-step caches, multiple OpenAI-compatible providers,
+generation-only operation, and multi-environment grading.
 
 Setup:
-    export DEEPSEEK_API_KEY=sk-...
-    python3 eval_clean/run_deepseek_eval.py
-    # quick check first:   python3 eval_clean/run_deepseek_eval.py --only 58,73,22
+    export DEEPSEEK_API_KEY=...
+    python3 eval_clean/run_deepseek_eval.py --model pro --background on --run smoke --only 58
 
 Original-vs-cleaned (before/after):
     --dataset original grades against the PRISTINE upstream benchmark (text + h5, md5-pinned;
@@ -19,7 +15,7 @@ Original-vs-cleaned (before/after):
     templates, timeouts, grading — is byte-identical, so the score difference isolates the
     benchmark content. Run dirs get an 'original_' prefix (cleaned runs keep 'cleaned_').
         python3 eval_clean/run_deepseek_eval.py --dataset original --run orig1 \
-            --model gpt-5.5 --background on --generate-only    # gen LOCAL (OpenRouter), grade on server
+            --model gpt-5.5 --background on --generate-only
 
 Multi-version OR grading (robust to numpy/scipy API drift):
     Grading is output-based (np.allclose to gold), so a step's verdict shouldn't depend on
@@ -43,21 +39,20 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 PRO_MAX   = "deepseek-v4-pro"       # "DeepSeek V4 Pro Max"
 FLASH_MAX = "deepseek-v4-flash"     # "DeepSeek Flash Max"
 REASONING_EFFORT = "max"            # the "Max" in both names
-# Providers expose the SAME deepseek-v4-{pro,flash} and BOTH accept reasoning_effort=max,
-# so the only difference is endpoint + key -> fair apples-to-apples ("降智") comparison.
+# OpenAI-compatible providers. URLs can be overridden for hosted or local gateways.
 PROVIDERS = {
-    "deepseek":   ("https://api.deepseek.com", "DEEPSEEK_API_KEY"),                                  # 官方
-    "ali":        (os.environ.get("ALI_API_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"), "ALI_API_KEY"),  # 阿里云 DashScope
-    "ali-glm":    (os.environ.get("ALI_API_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"), "GLM_API_KEY"),  # 同 DashScope,独立 key(GLM 专用)
-    "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),                            # LOCAL ONLY (remote region geo-blocked)
-    "ark":        (os.environ.get("ARK_API_URL", "https://ark.cn-beijing.volces.com/api/v3"), "ARK_API_KEY"),  # 火山方舟 (ByteDance Seed)
-    "meta":       (os.environ.get("META_API_URL", "https://api.meta.ai/v1"), "META_API_KEY"),        # Meta Model API (OpenAI-compatible)
-    "local":      (os.environ.get("LOCAL_API_URL", "http://localhost:8901/v1"), "LOCAL_API_KEY"),    # self-hosted vLLM (key optional)
+    "deepseek":   ("https://api.deepseek.com", "DEEPSEEK_API_KEY"),
+    "ali":        (os.environ.get("ALI_API_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"), "ALI_API_KEY"),
+    "ali-glm":    (os.environ.get("ALI_API_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"), "GLM_API_KEY"),
+    "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
+    "ark":        (os.environ.get("ARK_API_URL", "https://ark.cn-beijing.volces.com/api/v3"), "ARK_API_KEY"),
+    "meta":       (os.environ.get("META_API_URL", "https://api.meta.ai/v1"), "META_API_KEY"),
+    "moonshot":   (os.environ.get("MOONSHOT_API_URL", "https://api.moonshot.cn/v1"), "MOONSHOT_API_KEY"),
+    "local":      (os.environ.get("LOCAL_API_URL", "http://localhost:8901/v1"), "LOCAL_API_KEY"),
 }
 # Model registry: --model <key> -> (api_slug, default_provider, default_reasoning_effort). The
 # provider + effort are inferred from the key (override effort with --reasoning-effort). The
-# OpenRouter entries are the frontier set we may benchmark via OpenRouter — run them LOCALLY only
-# (sichuan2's region is geo-blocked for OpenRouter; see memory scicode-openrouter-local-only).
+# OpenRouter entries are convenience aliases used by our reproducible evaluation runs.
 # --model also accepts a RAW slug containing '/' (e.g. 'vendor/brand-new-model'): it is sent to
 # OpenRouter as-is with effort=high — new models need no code change (override via --provider/
 # --reasoning-effort).
@@ -68,34 +63,31 @@ REGISTRY = {
     "gemini-pro":   ("google/gemini-3.1-pro-preview",  "openrouter", "high"),
     "gpt-5.5":      ("openai/gpt-5.5",                 "openrouter", "high"),
     "gpt-5.5-pro":  ("openai/gpt-5.5-pro",             "openrouter", "high"),
-    "opus-4.8":     ("anthropic/claude-opus-4.8",      "openrouter", "high"),
+    "gpt-5.6-sol":  ("openai/gpt-5.6-sol",             "openrouter", "max"),
+    "opus-4.8":      ("anthropic/claude-opus-4.8",      "openrouter", "high"),
+    "fable-5":       ("anthropic/claude-fable-5",       "openrouter", "max"),
     "glm-5.2":      ("z-ai/glm-5.2",                   "openrouter", "high"),
-    # GLM-5.2 via 阿里云 DashScope (ALI_API_KEY): bare slug, thinking enabled via extra_body
-    # (see gen()), content-inspection disabled via header (see run_config). effort None — DashScope
-    # uses enable_thinking, not reasoning_effort.
+    # DashScope uses enable_thinking rather than reasoning_effort.
     "glm-5.2-ali":  ("glm-5.2",                        "ali-glm",    None),
-    # Muse Spark 1.1 = Meta Superintelligence Labs (2026-07-09), NOT on OpenRouter — direct Meta
-    # Model API (OpenAI-compatible chat completions). AA's headline score is at effort=xhigh.
-    "muse-spark":   ("muse-spark-1.1",                 "meta",       "xhigh"),
-    # Seed 2.1 Pro = ByteDance, 火山方舟 real model ID (dated). thinking is on by default; ARK may
-    # not take reasoning_effort (None = don't send; gen() also auto-drops it if rejected).
+    "muse-spark":   ("meta/muse-spark-1.1",            "openrouter", "xhigh"),
     "seed-2.1-pro": ("doubao-seed-2-1-pro-260628",     "ark",        None),
-    # Self-hosted on sichuan2 GPU7 via vLLM (env verl_qwen35, port 8901, --reasoning-parser qwen3):
-    #   CUDA_VISIBLE_DEVICES=7 vllm serve /data1/model/Qwen3.6-35B-A3B \
-    #       --served-model-name qwen3.6-35b-a3b --port 8901 --max-model-len 65536 \
-    #       --gpu-memory-utilization 0.68 --reasoning-parser qwen3
-    "qwen3.6-35b":  ("qwen3.6-35b-a3b",                "local",      None),
-    # OUR OWN FINE-TUNE (not a paper model): keep its results out of the paper runs by using the
-    # dedicated run tag  --run bigbang-35b  -> ds_runs/bigbang-35b/  (see that dir's README).
-    #   CUDA_VISIBLE_DEVICES=6 vllm serve /data1/model/<checkpoint> \
-    #       --served-model-name bigbang-35b --port 8902 --max-model-len 65536 \
-    #       --gpu-memory-utilization 0.68 --reasoning-parser qwen3 \
-    #       --additional-config '{"gdn_prefill_backend": "triton"}'
-    # then: LOCAL_API_URL=http://localhost:8902/v1
-    "bigbang-35b":  ("bigbang-35b",                    "local",      None),
+    "kimi-3":       ("kimi-k3",                         "moonshot",   "max"),
 }
 PROVIDER = "deepseek"               # set per selected model in main()
 BASE_URL, KEY_ENV = PROVIDERS[PROVIDER]
+
+
+def _registry_help():
+    """Return an automatically up-to-date provider/model alias list."""
+    by_provider = collections.OrderedDict()
+    for key, (_slug, provider, _effort) in REGISTRY.items():
+        by_provider.setdefault(provider, []).append(key)
+    return " | ".join(
+        f"{provider}: {', '.join(keys)}"
+        for provider, keys in by_provider.items()
+    )
+
+
 # =============================================================================================
 
 MAX_TOKENS = None      # per-call output cap; None = API default. Set via --max-tokens.
@@ -113,16 +105,10 @@ EFFORT_SUPPORTED = True # flips off (per run) if the endpoint rejects reasoning_
 # --full-envs (breakdown mode runs them all).
 GRADING_ENVS = None    # list[(label, python_path)]; set in main()
 FULL_ENVS = False      # run every env per step even after one passes (breakdown). Set via --full-envs.
-# When --envs is omitted, grade under BOTH a 2024-era and a 2025-era scientific-Python env by
-# default (OR / pass-if-any), so results are robust to numpy/scipy API drift. Override with
-# SCICODE_GRADE_ENVS="label:path,label:path". Entries whose python is missing are skipped; if
-# none exist (e.g. a dev box without these envs), it falls back to a single env (current python).
-DEFAULT_ENVS = [
-    ("2024", "/home/xcai/miniconda3/envs/sci2024/bin/python"),  # sichuan2: numpy 1.26 / scipy 1.13 (has simps, trapz)
-    ("2025", "/home/xcai/miniconda3/envs/cp312/bin/python"),    # sichuan2: numpy 2.4 / scipy 1.17
-    ("2024", "/home/hsh/anaconda3/envs/sci2024/bin/python"),    # local (OpenRouter runs): numpy 1.26 / scipy 1.13
-    ("2025", "/home/hsh/anaconda3/envs/cp310/bin/python3"),     # local: numpy 2.2 / scipy 1.15 (new API)
-]   # first existing path per label wins (dedup below) -> same 2024+2025 OR on sichuan2 AND locally
+# Configure canonical environments portably with:
+# SCICODE_GRADE_ENVS="2024:/path/to/python,2025:/path/to/python".
+# Without configured environments, the runner grades in the current interpreter.
+DEFAULT_ENVS = []
 # Thread caps so many parallel grading subprocesses don't oversubscribe the box via BLAS.
 SUBENV = {**os.environ, "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1",
           "MKL_NUM_THREADS": "1", "NUMEXPR_NUM_THREADS": "1"}
@@ -164,7 +150,7 @@ def _md5f(p):
         for c in iter(lambda: f.read(1 << 20), b""): h.update(c)
     return h.hexdigest()
 
-def _check_manifest():
+def _check_manifest(require_h5=True):
     """Refuse to run on stale data: assert jsonl/h5 md5 == manifest (verify-with-human
     invariant 5). Set ALLOW_UNVERIFIED_DATA=1 to bypass (not recommended)."""
     import json as _json
@@ -175,11 +161,14 @@ def _check_manifest():
     man = _json.loads(MANIFEST.read_text())
     if _md5f(DATA) != man.get("problems_test_jsonl_md5"):
         sys.exit(f"FATAL: {DATA} md5 != manifest — data is stale/edited. Run tools/assemble.py + tools/verify.py.")
+    if require_h5 and not os.path.exists(H5):
+        sys.exit(f"FATAL: {H5} missing — download the data release (see README).")
     if man.get("h5_md5") and os.path.exists(H5) and _md5f(H5) != man["h5_md5"]:
         sys.exit(f"FATAL: {H5} md5 != manifest — h5 is stale. Rebuild via eval_clean/build_clean_h5.py.")
-    print(f"manifest OK: dataset {man.get('version')} ({man.get('n_problems')} problems), data md5 verified.")
+    verified = "jsonl+h5" if os.path.exists(H5) else "jsonl (generation-only; h5 not present)"
+    print(f"manifest OK: dataset {man.get('version')} ({man.get('n_problems')} problems), {verified} md5 verified.")
 
-def _check_original():
+def _check_original(require_h5=True):
     """Same stale-data discipline for the ORIGINAL dataset: both files must match the pinned
     pristine-upstream md5s (guards against grading 'original' runs on an edited/partial copy)."""
     if os.environ.get("ALLOW_UNVERIFIED_DATA") == "1":
@@ -188,11 +177,12 @@ def _check_original():
         sys.exit(f"FATAL: {ORIG_DATA} missing (tracked in git — pull/rsync the repo).")
     if _md5f(ORIG_DATA) != ORIG_JSONL_MD5:
         sys.exit(f"FATAL: {ORIG_DATA} md5 != pinned pristine-upstream value {ORIG_JSONL_MD5}.")
-    if not os.path.exists(ORIG_H5):
+    if require_h5 and not os.path.exists(ORIG_H5):
         sys.exit(f"FATAL: {ORIG_H5} missing — the original test_data.h5 (clone SciCode / hfd.sh, see README).")
-    if _md5f(ORIG_H5) != ORIG_H5_MD5:
+    if os.path.exists(ORIG_H5) and _md5f(ORIG_H5) != ORIG_H5_MD5:
         sys.exit(f"FATAL: {ORIG_H5} md5 != pinned pristine-upstream value {ORIG_H5_MD5}.")
-    print("original dataset OK: pristine upstream jsonl + h5 md5 verified (64 problems).")
+    verified = "jsonl+h5" if os.path.exists(ORIG_H5) else "jsonl (generation-only; h5 not present)"
+    print(f"original dataset OK: pristine upstream {verified} md5 verified (64 problems).")
 # Match the OFFICIAL SciCode harness: WITH background -> multistep_template (background is provided);
 # WITHOUT background -> background_comment_template (the model must first generate the scientific
 # background as a '# Background: ' comment, then code). Selected per-config in build_prompt.
@@ -450,10 +440,9 @@ def main():
     ap.add_argument("--only", default="", help="comma-separated problem ids for a quick check")
     ap.add_argument("--workers", type=int, default=4, help="problems run in parallel within a config")
     ap.add_argument("--model", default=None,
-                    help="model key from REGISTRY (pro/flash=DeepSeek; gemini-flash/gemini-pro/gpt-5.5/"
-                         "gpt-5.5-pro/opus-4.8/glm-5.2/muse-spark/seed-2.1-pro=OpenRouter, LOCAL ONLY), "
-                         "or a RAW slug containing '/' (sent to OpenRouter as-is, effort=high). "
-                         "Default: both DeepSeek (pro+flash).")
+                    help="model alias grouped by provider — " + _registry_help() +
+                         ". Also accepts a raw 'vendor/model' OpenRouter slug, or any endpoint "
+                         "model name together with --provider. Default: both DeepSeek aliases.")
     ap.add_argument("--dataset", choices=["cleaned", "original"], default="cleaned",
                     help="which benchmark DATA to run: 'cleaned' (default; scicode_verified/, manifest-"
                          "checked) or 'original' (pristine upstream text + h5, md5-pinned; same 64 "
@@ -493,9 +482,9 @@ def main():
     TEMPERATURE, TOP_P, TOP_K, MIN_P = a.temperature, a.top_p, a.top_k, a.min_p
     if a.dataset == "original":
         DS_TAG, DATA, H5 = "original", ORIG_DATA, ORIG_H5
-        _check_original()   # refuse to run on a non-pristine copy of the upstream data
+        _check_original(require_h5=not a.generate_only)
     else:
-        _check_manifest()   # refuse to run on stale/edited data (verify-with-human invariant 5)
+        _check_manifest(require_h5=not a.generate_only)
     MAX_TOKENS = a.max_tokens
     VERBOSE_STEPS = a.verbose_steps
     FULL_ENVS = a.full_envs
@@ -508,11 +497,11 @@ def main():
             if not os.path.exists(py): sys.exit(f"--envs python not found: {py}")
             GRADING_ENVS.append((lab, py))
     else:
-        # default: grade under BOTH era-envs (OR). Env var override, else DEFAULT_ENVS.
+        # Use configured environments when available, otherwise the current interpreter.
         ev = os.environ.get("SCICODE_GRADE_ENVS")
         cand = ([(e.split(":", 1)[0], e.split(":", 1)[1]) for e in ev.split(",") if ":" in e]
                 if ev else DEFAULT_ENVS)
-        _seen, GRADING_ENVS = set(), []   # first existing path per label (sichuan2 OR local)
+        _seen, GRADING_ENVS = set(), []
         for l, p in cand:
             if l not in _seen and os.path.exists(p):
                 GRADING_ENVS.append((l, p)); _seen.add(l)

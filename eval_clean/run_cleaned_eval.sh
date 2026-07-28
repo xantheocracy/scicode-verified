@@ -10,7 +10,7 @@
 # Override anything via env vars: PYTHON, SERVICE, MODEL_NAME, REASONING, MAX_TOKENS, SPLIT, OUTPUT_DIR.
 set -e
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"          # repo root (.../SciCode_refine)
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"          # repository root
 INSPECT_DIR="$ROOT/SciCode/eval/inspect_ai"
 
 # --- pick which dataset/targets to score against ---

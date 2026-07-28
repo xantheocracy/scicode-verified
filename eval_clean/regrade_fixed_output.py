@@ -12,8 +12,7 @@ corrections:
 
 Zero API cost: only re-runs cached *.code.py (the harness's authoritative per-step
 artifact — run_deepseek_eval.run_problem re-reads code.py on resume, and raw.json's
-extracted_code is byte-identical where present; three OpenRouter models were generated
-locally so only their code.py were synced to sichuan2).
+extracted_code is byte-identical where present).
 
 Grading recipe is byte-identical to run_deepseek_eval.score_step: per problem,
 cumulative code = CLEANED required_dependencies + each step's cached code (SKIP steps
@@ -32,16 +31,19 @@ Outputs (never touches orig1/run4/SSOT; resume-safe via per-step score.json):
   eval_clean/ds_runs/regrade1/signature_changes.json
   eval_clean/ds_runs/regrade1/comparison.json   (orig1 -> crossgrade -> run4 + flags)
 
-Usage (sichuan2, /data1/sihan/scicode-verified):
-  python3 eval_clean/regrade_fixed_output.py --workers 48
-  python3 eval_clean/regrade_fixed_output.py --models deepseek-v4-flash --only 11,37   # smoke
+Usage:
+  python3 eval_clean/regrade_fixed_output.py --workers 48 \
+      --envs 2024:/path/to/scipy-2024/bin/python 2025:/path/to/scipy-2025/bin/python
+  python3 eval_clean/regrade_fixed_output.py --models deepseek-v4-flash --only 11,37 \
+      --envs 2024:/path/to/scipy-2024/bin/python 2025:/path/to/scipy-2025/bin/python
 """
 import os, sys, json, re, time, signal, hashlib, argparse, subprocess, collections
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 ROOT      = Path(__file__).resolve().parent.parent
-SRC       = ROOT / "SciCode" / "src"
+SRC       = (ROOT / "SciCode" / "src") if (ROOT / "SciCode" / "src").exists() \
+            else (ROOT / "eval_clean" / "vendor")
 H5        = str(ROOT / "scicode_verified" / "test_data_cleaned.h5")
 DATA      = ROOT / "scicode_verified" / "problems_test.jsonl"
 MANIFEST  = ROOT / "scicode_verified" / "manifest.json"
@@ -54,10 +56,8 @@ OUT  = RUNS / RUN_TAG
 TMP  = OUT / "_tmp"
 SKIP = {("13", 5), ("62", 0), ("76", 2)}   # official harness skip list (pid, step_index)
 
-# Same two era envs as the canonical runs (run_deepseek_eval.DEFAULT_ENVS on sichuan2),
-# same order, same OR short-circuit.
-ENVS = [("2024", "/home/xcai/miniconda3/envs/sci2024/bin/python"),   # numpy 1.26 / scipy 1.13
-        ("2025", "/home/xcai/miniconda3/envs/cp312/bin/python")]     # numpy 2.4 / scipy 1.17
+# Set explicitly in main() from --envs; order controls OR short-circuiting.
+ENVS = []
 TIMEOUT = 1800   # official per-step per-env cap (matches run_deepseek_eval._run_script)
 SUBENV = {**os.environ, "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1",
           "MKL_NUM_THREADS": "1", "NUMEXPR_NUM_THREADS": "1"}
@@ -173,13 +173,23 @@ def discover_models():
 
 
 def main():
+    global ENVS
     ap = argparse.ArgumentParser()
     ap.add_argument("--models", default="", help="comma-separated safe model names "
                     "(default: all original_* dirs under ds_runs/orig1)")
     ap.add_argument("--only", default="", help="comma-separated problem ids (smoke test; "
                     "results.json/comparison.json are only written on FULL runs)")
     ap.add_argument("--workers", type=int, default=48)
+    ap.add_argument("--envs", nargs="+", required=True,
+                    help="grading environments as label:/path/to/python pairs")
     a = ap.parse_args()
+
+    ENVS = []
+    for entry in a.envs:
+        if ":" not in entry:
+            sys.exit(f"FATAL: --envs entry must be label:/path/to/python: {entry!r}")
+        label, python = entry.split(":", 1)
+        ENVS.append((label, python))
 
     check_data()
     for lab, py in ENVS:

@@ -11,10 +11,10 @@ It reuses the EXACT cumulative-code + target-loading recipe of
 run_deepseek_eval.score_step (identical verdict per env). Generation is unchanged; this
 only re-runs existing *.code.py, so there are NO API calls and NO cost.
 
-Envs are `label:python_executable` pairs. Example (on sichuan2):
+Envs are `label:python_executable` pairs:
   python3 eval_clean/regrade_multienv.py --run run3 --models pro,flash --workers 32 \
-     --envs 2024:/home/xcai/miniconda3/envs/sci2024/bin/python \
-            2025:/home/xcai/miniconda3/envs/cp312/bin/python
+     --envs 2024:/path/to/scipy-2024/bin/python \
+            2025:/path/to/scipy-2025/bin/python
 
 Writes per step: <cdir>/<sid>.multienv.json = {"step_id","per_env":{label:bool},"passed":any}.
 Prints, per model: each env's solo accuracy, the OR accuracy, and a breakdown of how many
@@ -65,7 +65,14 @@ def main():
     if a.dataset == "original":
         R.DS_TAG, R.DATA, R.H5 = "original", R.ORIG_DATA, R.ORIG_H5
 
-    envs = [(e.split(":", 1)[0], e.split(":", 1)[1]) for e in a.envs]
+    envs = []
+    for entry in a.envs:
+        if ":" not in entry:
+            sys.exit(f"--envs entry must be label:/path/to/python: {entry!r}")
+        envs.append(tuple(entry.split(":", 1)))
+    for label, python in envs:
+        if not os.path.exists(python):
+            sys.exit(f"grading environment not found: {label} -> {python}")
     labels = [l for l, _ in envs]
     sel = [R.REGISTRY[m][0] if m in R.REGISTRY else m for m in a.models.split(",")]
     probs = [json.loads(l) for l in open(R.DATA)]

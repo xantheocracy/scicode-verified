@@ -12,6 +12,12 @@ together. Everything here was reproduced from the data — never taken on trust.
 + `scicode_verified/manifest.json`. Prebuilt data:
 [GitHub Release `data`](https://github.com/flyingwagner/scicode-verified/releases/tag/data).
 
+**Scope note.** This log covers the complete 80-problem audit and therefore reports 397 findings
+across the development and test splits. The public v2 evaluation release contains 64 problems;
+its release-specific taxonomy contains 264 confirmed corrections across 63 problems. Of those,
+192 can suppress a correct solution, touching 155 of the 287 scored subproblems. See
+[`analysis/`](analysis/) for the release-level machine-readable counts.
+
 ---
 
 ## 1. Why SciCode needed cleaning — the airtight dev-set exhibit
