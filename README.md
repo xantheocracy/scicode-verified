@@ -17,8 +17,6 @@
 
 </div>
 
-<img src="assets/scicode-verified-hero.png" width="100%" alt="Scientific signals and code converging into a verified, orderly benchmark">
-
 SciCode-Verified is an independent, human-in-the-loop correction of the
 [SciCode](https://github.com/scicode-bench/SciCode) test benchmark. It preserves the scientific
 reasoning challenge while repairing contradictions, missing conventions, incorrect frozen
@@ -33,33 +31,29 @@ targets, non-deterministic tests, and other defects that can reject valid soluti
   </tr>
 </table>
 
-## The benchmark was measuring its own defects
+## How one defect becomes a benchmark-wide failure
 
-SciCode scores a whole problem only when every scored subproblem passes. One defective
-subproblem can therefore erase an otherwise correct multi-step solution.
+<img src="assets/paper-defect-mechanism.png" width="100%" alt="A benchmark defect propagating through cumulative subproblems and causing a false whole-problem failure">
 
-<img src="assets/before-after.png" width="100%" alt="Original and verified SciCode scores for eleven models">
+SciCode subproblems are cumulative, and a whole problem passes only when every scored
+subproblem passes. One defective specification, frozen answer, or test can therefore propagate
+downstream and erase an otherwise correct solution. The audit found this score-suppressing
+failure mode in **58 of 64 main problems**.
 
-Across the completed matched, with-background evaluations as of **2026-07-28**, changing only
-the benchmark data moves the observed frontier from **45.3–60.6% to 83.7–98.3%** on
-subproblems, and from **9.4–26.6% to 68.8–92.2%** on whole problems. The harness, output
-protocol, and pass@1 setting are held fixed.
+## Matched re-evaluation
+
+<img src="assets/paper-before-after.png" width="100%" alt="Paper figure comparing original SciCode and SciCode-Verified accuracy for nine frontier models">
+
+In the manuscript's matched nine-model evaluation, changing only the benchmark data moves the
+observed frontier from **45.3–60.3% to 83.7–98.3%** on subproblems, and from
+**9.4–25.0% to 68.8–92.2%** on whole problems. The model outputs protocol, evaluation harness,
+with-background condition, pass@1 setting, and multi-environment-OR grading are held fixed.
 
 > SciCode-Verified is not an easier rewrite. Corrections state what is required to make each
 > task well posed and its grading faithful. Weak tests are tightened; the scientific
 > derivations and algorithms remain the model's responsibility.
 
-## Why the original leaderboard looked compressed
-
-<img src="assets/leaderboard-compression.png" width="100%" alt="Original SciCode public leaderboard showing a compressed frontier">
-
-On the original public benchmark, the frontier sits in a narrow 53–60% band while the
-280-configuration average is 42.9%. SciCode-Verified reveals that much of this apparent
-compression comes from shared benchmark defects rather than shared model capability.
-
-## From audit to release
-
-<img src="assets/verification-pipeline.svg" width="100%" alt="Audit, trace, rebuild, and verify pipeline">
+## Reproducible by construction
 
 Every accepted correction is recorded in a ledger, propagated from a single source of truth,
 and checked against the released JSONL, HDF5, and manifest. See
