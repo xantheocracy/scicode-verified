@@ -24,10 +24,10 @@ targets, non-deterministic tests, and other defects that can reject valid soluti
 
 <table>
   <tr>
-    <td align="center"><strong>264</strong><br>verified corrections</td>
+    <td align="center"><strong>262</strong><br>verified corrections</td>
     <td align="center"><strong>63 / 64</strong><br>problems changed</td>
-    <td align="center"><strong>192 / 264</strong><br>defects that reject correct code</td>
-    <td align="center"><strong>71 / 287</strong><br>subproblems with faulty tests or gold</td>
+    <td align="center"><strong>192 / 262</strong><br>defects that reject correct code</td>
+    <td align="center"><strong>155 / 287</strong><br>affected subproblems</td>
   </tr>
 </table>
 
@@ -42,11 +42,11 @@ failure mode in **58 of 64 main problems**.
 
 ## Matched re-evaluation
 
-<img src="assets/paper-before-after.png" width="100%" alt="Paper figure comparing original SciCode and SciCode-Verified accuracy for nine frontier models">
+<img src="assets/paper-before-after.png" width="100%" alt="Paper figure comparing original SciCode and SciCode-Verified accuracy for twelve frontier model snapshots">
 
-In the manuscript's matched nine-model evaluation, changing only the benchmark data moves the
+In the manuscript's matched twelve-model-snapshot evaluation, changing only the benchmark data moves the
 observed frontier from **45.3–60.3% to 83.7–98.3%** on subproblems, and from
-**9.4–25.0% to 68.8–92.2%** on whole problems. The model outputs protocol, evaluation harness,
+**9.4–26.6% to 68.8–92.2%** on whole problems. The model output protocol, evaluation harness,
 with-background condition, pass@1 setting, and multi-environment-OR grading are held fixed.
 
 > SciCode-Verified is not an easier rewrite. Corrections state what is required to make each
