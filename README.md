@@ -21,6 +21,12 @@
 
 </div>
 
+## News
+
+- **August 2026:** The [SciCode-Verified paper](https://arxiv.org/abs/2608.04975) is now on arXiv,
+  and the versioned `v2` benchmark data is available on
+  [Hugging Face](https://huggingface.co/datasets/shhu2001/SciCode-Verified).
+
 SciCode-Verified is an independent, human-in-the-loop correction of the
 [SciCode](https://github.com/scicode-bench/SciCode) test benchmark. It preserves the scientific
 reasoning challenge while repairing contradictions, missing conventions, incorrect frozen
