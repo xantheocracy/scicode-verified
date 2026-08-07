@@ -4,12 +4,14 @@
 
 **A human-verified benchmark for scientific code generation**
 
+[Paper](https://arxiv.org/abs/2608.04975) ·
 [Dataset](https://github.com/flyingwagner/scicode-verified/releases/tag/data) ·
 [Run the benchmark](#run-it) ·
 [Evaluation protocol](#evaluation-protocol) ·
 [Audit trail](CLEANING_LOG.md) ·
 [Upstream SciCode](https://github.com/scicode-bench/SciCode)
 
+[![arXiv](https://img.shields.io/badge/arXiv-2608.04975-b31b1b.svg)](https://arxiv.org/abs/2608.04975)
 [![Dataset](https://img.shields.io/badge/dataset-v2-4c6ef5)](https://github.com/flyingwagner/scicode-verified/releases/tag/data)
 [![Problems](https://img.shields.io/badge/problems-64-7950f2)](scicode_verified/problems_test.jsonl)
 [![Scored subproblems](https://img.shields.io/badge/scored_subproblems-287-9c36b5)](scicode_verified/manifest.json)
@@ -136,3 +138,15 @@ The evaluator verifies its hash before running.
 SciCode-Verified is derived from SciCode and redistributed under the Apache License 2.0. The
 vendored upstream notice and license are in [`eval_clean/vendor/`](eval_clean/vendor/). If you
 use this release, please cite both the original SciCode benchmark and SciCode-Verified.
+
+```bibtex
+@article{hu2026scicodeverified,
+  title         = {{SciCode-Verified}: How Benchmark Defects Underestimated the Scientific-Coding Ability of Language Models},
+  author        = {Hu, Sihan and Huang, Lyuhan and Deng, Youjin and Chen, Kun},
+  year          = {2026},
+  eprint        = {2608.04975},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://arxiv.org/abs/2608.04975}
+}
+```
