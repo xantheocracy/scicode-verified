@@ -5,13 +5,15 @@
 **A human-verified benchmark for scientific code generation**
 
 [Paper](https://arxiv.org/abs/2608.04975) ·
-[Dataset](https://github.com/flyingwagner/scicode-verified/releases/tag/data) ·
+[Dataset](https://huggingface.co/datasets/shhu2001/SciCode-Verified) ·
+[GitHub data release](https://github.com/flyingwagner/scicode-verified/releases/tag/data) ·
 [Run the benchmark](#run-it) ·
 [Evaluation protocol](#evaluation-protocol) ·
 [Audit trail](CLEANING_LOG.md) ·
 [Upstream SciCode](https://github.com/scicode-bench/SciCode)
 
 [![arXiv](https://img.shields.io/badge/arXiv-2608.04975-b31b1b.svg)](https://arxiv.org/abs/2608.04975)
+[![Hugging Face](https://img.shields.io/badge/Hugging_Face-Dataset-FFD21E)](https://huggingface.co/datasets/shhu2001/SciCode-Verified)
 [![Dataset](https://img.shields.io/badge/dataset-v2-4c6ef5)](https://github.com/flyingwagner/scicode-verified/releases/tag/data)
 [![Problems](https://img.shields.io/badge/problems-64-7950f2)](scicode_verified/problems_test.jsonl)
 [![Scored subproblems](https://img.shields.io/badge/scored_subproblems-287-9c36b5)](scicode_verified/manifest.json)
@@ -74,7 +76,17 @@ source .venv/bin/activate
 python -m pip install -U pip openai h5py numpy scipy matplotlib sympy
 ```
 
-Download the released grading targets and verify their checksum:
+Download the released grading targets from Hugging Face and verify their checksum:
+
+```bash
+hf download shhu2001/SciCode-Verified test_data_cleaned.h5 \
+  --repo-type dataset \
+  --local-dir scicode_verified
+md5sum scicode_verified/test_data_cleaned.h5
+# 2b41a7df40ddc23ce651ec05b8ecb6f8
+```
+
+The same file is mirrored in GitHub Releases:
 
 ```bash
 gh release download data --repo flyingwagner/scicode-verified --dir scicode_verified
@@ -129,7 +141,8 @@ before/after evaluation above.
 | [`ledger/`](ledger/) | Per-change provenance and focused defect investigations |
 | [`tools/`](tools/) | Dataset assembly and release verification gate |
 
-The large `test_data_cleaned.h5` is distributed through
+The large `test_data_cleaned.h5` is distributed through the
+[Hugging Face dataset](https://huggingface.co/datasets/shhu2001/SciCode-Verified) and mirrored in
 [GitHub Releases](https://github.com/flyingwagner/scicode-verified/releases/tag/data), not Git.
 The evaluator verifies its hash before running.
 
