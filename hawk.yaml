@@ -1,9 +1,9 @@
 name: scicode-verified-luna-smoke
 
-# Publish the inspect-wrapper branch before launching on the cluster.
-# For reproducible runs, replace inspect-wrapper with its published commit SHA.
+# Use the branch so dependency fixes are picked up after pushing.
+# For reproducible runs, replace inspect-wrapper with the published commit SHA.
 tasks:
-  - package: git+https://github.com/flyingwagner/scicode-verified.git@inspect-wrapper
+  - package: git+https://github.com/xantheocracy/scicode-verified.git@inspect-wrapper
     name: scicode_inspect
     items:
       - name: scicode_verified
