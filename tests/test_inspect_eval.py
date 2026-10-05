@@ -6,6 +6,7 @@ import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import h5py
 from inspect_ai import Task, eval
 from inspect_ai.model import ChatMessageAssistant, ModelOutput
 from inspect_ai.scorer import SampleScore, Score, Target
@@ -44,17 +45,19 @@ def test_manifest_verification(tmp_path, monkeypatch):
     payload = json.dumps({"problem_id": "1", "sub_steps": []}).encode() + b"\n"
     data.write_bytes(payload)
     targets = tmp_path / "targets.h5"
-    targets.write_bytes(b"fixture")
+    with h5py.File(targets, "w"):
+        pass
     manifest = {
         "version": "test",
         "problem_order": ["1"],
         "problems_test_jsonl_md5": hashlib.md5(payload).hexdigest(),
-        "h5_md5": hashlib.md5(b"fixture").hexdigest(),
+        "h5_md5": hashlib.md5(targets.read_bytes()).hexdigest(),
     }
     (tmp_path / "manifest.json").write_text(json.dumps(manifest))
     monkeypatch.setattr(wrapper, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(wrapper.Path, "home", lambda: tmp_path)
     dataset = wrapper.get_dataset(str(targets))
-    assert dataset[0].files["test_data_cleaned.h5"] == str(targets)
+    assert dataset[0].files["test_data_cleaned.h5"] != str(targets)
     targets.write_bytes(b"wrong")
     with pytest.raises(ValueError, match="checksum mismatch"):
         wrapper.get_dataset(str(targets))
@@ -222,3 +225,35 @@ def test_task_options():
 
 def test_extractor_parity():
     assert extract_code("```\nimport os\nprint(1)\n```") == "\nprint(1)\n"
+
+
+def test_target_shards_preserve_groups_and_exclude_other_problems(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(wrapper.Path, "home", lambda: tmp_path)
+    targets = tmp_path / "targets.h5"
+    with h5py.File(targets, "w") as source:
+        group = source.create_group("5.1/test1")
+        group.attrs["kind"] = "fixture"
+        group.create_dataset("value", data=[1.5, 2.5])
+        source.create_group("13.6")
+        source.create_group("99.1")
+    sample = wrapper.Sample(
+        input="5",
+        id="5",
+        metadata={"sub_steps": [{"step_number": "5.1"}, {"step_number": "13.6"}]},
+    )
+    wrapper.prepare_target_shards([sample], targets, "fixture")
+    shard_path = wrapper.Path(sample.files["test_data_cleaned.h5"])
+    with h5py.File(shard_path, "r") as shard:
+        assert list(shard) == ["5.1"]
+        assert shard["5.1/test1"].attrs["kind"] == "fixture"
+        assert list(shard["5.1/test1/value"][()]) == [1.5, 2.5]
+    before = shard_path.stat().st_mtime_ns
+    wrapper.prepare_target_shards([sample], targets, "fixture")
+    assert shard_path.stat().st_mtime_ns == before
+    sample.metadata["sub_steps"] = [{"step_number": "missing"}]
+    with pytest.raises(ValueError, match="missing step"):
+        wrapper.prepare_target_shards([sample], targets, "fixture")
+    assert not wrapper.Path(sample.files["test_data_cleaned.h5"]).exists()
+    assert not list(shard_path.parent.glob("*.partial"))

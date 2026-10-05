@@ -5,7 +5,9 @@ Run from this checkout with ``inspect eval scicode_inspect.py --model ...``.
 
 import hashlib
 import json
+import os
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any, cast
 
 from inspect_ai import Task, task
@@ -84,7 +86,50 @@ def get_dataset(
         )
         for record in records
     ]
+    if require_targets:
+        prepare_target_shards(samples, targets, manifest["h5_md5"])
     return MemoryDataset(samples, name=f"SciCode-Verified-{manifest['version']}")
+
+
+def prepare_target_shards(
+    samples: list[Sample], targets: Path, source_md5: str
+) -> None:
+    """Copy only a problem's scored HDF5 groups into its sandbox artifact."""
+    import h5py
+
+    cache = Path.home() / ".cache" / "scicode_verified" / f"shards_v1_{source_md5}"
+    pending = []
+    for sample in samples:
+        step_ids = list(
+            dict.fromkeys(
+                str(step["step_number"])
+                for step in (sample.metadata or {})["sub_steps"]
+                if step["step_number"] not in PROVIDED_STEPS
+            )
+        )
+        key = hashlib.sha256(json.dumps(step_ids).encode()).hexdigest()
+        shard = cache / f"{key}.h5"
+        sample.files = {"test_data_cleaned.h5": str(shard)}
+        if not shard.is_file() or shard.stat().st_size == 0:
+            pending.append((shard, step_ids))
+    if not pending:
+        return
+    cache.mkdir(parents=True, exist_ok=True)
+    with h5py.File(targets, "r") as source:
+        for shard, step_ids in pending:
+            with NamedTemporaryFile(dir=cache, suffix=".partial", delete=False) as tmp:
+                temporary = Path(tmp.name)
+            try:
+                with h5py.File(temporary, "w") as output:
+                    for step_id in step_ids:
+                        if step_id not in source:
+                            raise ValueError(
+                                f"Released targets missing step {step_id}."
+                            )
+                        source.copy(step_id, output)
+                os.replace(temporary, shard)
+            finally:
+                temporary.unlink(missing_ok=True)
 
 
 @solver

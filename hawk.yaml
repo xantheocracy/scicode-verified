@@ -8,7 +8,7 @@ tasks:
     items:
       - name: scicode_verified
         args:
-          provide_scientific_background: true
+          #provide_scientific_background: true
           download_targets: true
           grading_environments: both
           timeout: 1800
@@ -19,7 +19,7 @@ models:
     items:
       - name: gpt-6-luna
 
-limit: 1
+#limit: 1
 epochs: 1
 retry_attempts: 0
 max_retries: 3

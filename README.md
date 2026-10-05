@@ -168,7 +168,7 @@ The Docker environments pin NumPy/SciPy to `1.26.4`/`1.13.1` and `2.4.2`/`1.17.1
 
 ### Run on Hawk
 
-[`hawk.yaml`](hawk.yaml) configures one main-problem sample (`limit: 1`), one epoch, the `openai/gpt-6-luna` model, and grading in both environments. The first sample is problem 5, which includes several model calls, one per scored subproblem. The runner downloads and verifies the corrected targets automatically. No checkpointing is enabled.
+[`hawk.yaml`](hawk.yaml) configures one main-problem sample (`limit: 1`), one epoch, the `openai/gpt-6-luna` model, and grading in both environments. The first sample is problem 5, which includes several model calls, one per scored subproblem. The runner downloads and verifies the corrected targets automatically, then caches one HDF5 shard per main problem containing only its scored steps. Each sandbox receives that shard under the usual `test_data_cleaned.h5` filename, avoiding repeated copies of the full release. No checkpointing is enabled.
 
 Hawk installs the task from Git. Publish the `inspect-wrapper` branch containing these changes before launching, then replace the branch ref in `tasks[0].package` with that published commit SHA to pin the run. The repository now includes package metadata and an Inspect entry point for this installation.
 

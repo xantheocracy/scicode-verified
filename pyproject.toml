@@ -7,7 +7,7 @@ name = "scicode-verified"
 version = "0.1.0"
 description = "SciCode-Verified scientific code generation benchmark with an Inspect task"
 requires-python = ">=3.11"
-dependencies = ["inspect-ai>=0.3.263"]
+dependencies = ["inspect-ai>=0.3.263", "h5py>=3.12"]
 
 [project.optional-dependencies]
 test = ["pytest>=8", "ruff"]
