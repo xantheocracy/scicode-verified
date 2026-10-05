@@ -164,13 +164,30 @@ inspect score logs/inspect-generation/<run>.eval
 
 Use the `--no-score` path for deferred grading. The `generate_only` option is useful when targets and Docker are unavailable; its logs retain code for custom re-scoring, but do not contain target-file or sandbox setup.
 
-The Docker environments pin NumPy/SciPy to `1.26.4`/`1.13.1` and `2.4.2`/`1.17.1`. Both include matplotlib, h5py, and sympy. These environments implement the two-version OR protocol but do not reproduce every package or installation omission in the paper's historical machines.
+The Docker environments pin NumPy/SciPy to `1.26.4`/`1.13.1` and `2.4.2`/`1.17.1`. Both include h5py and sympy; only the newer environment includes matplotlib, matching the historical omission recorded in `analysis/or_gain.json`. Python 3.12 and the remaining package pins provide a reproducible approximation; the repository does not supply complete historical environment lockfiles.
 
 ### Run on Hawk
 
 [`hawk.yaml`](hawk.yaml) configures one main-problem sample (`limit: 1`), one epoch, the `openai/gpt-6-luna` model, and grading in both environments. The first sample is problem 5, which includes several model calls, one per scored subproblem. The runner downloads and verifies the corrected targets automatically. No checkpointing is enabled.
 
 Hawk installs the task from Git. Publish the `inspect-wrapper` branch containing these changes before launching, then replace the branch ref in `tasks[0].package` with that published commit SHA to pin the run. The repository now includes package metadata and an Inspect entry point for this installation.
+
+Hawk requires a published sandbox image; it does not build the Compose `build:` definition. The Compose file uses `ghcr.io/xantheocracy/scicode-sandbox:verified-v1` on Linux amd64. Its `build:` definition is retained for local Docker runs.
+
+Start Docker Desktop, then run these commands from this repository's root:
+
+```bash
+# Use a GitHub classic token with write:packages permission at the password prompt.
+docker login ghcr.io -u xantheocracy
+
+# Build, run the Dockerfile's import checks, and publish for Hawk's architecture.
+docker buildx build --platform linux/amd64 \
+  -f eval_clean/inspect/Dockerfile \
+  -t ghcr.io/xantheocracy/scicode-sandbox:verified-v1 \
+  --push eval_clean
+```
+
+In GitHub, open the `scicode-sandbox` package settings and ensure the package is public so the cluster can pull it. For reproducibility, replace the Compose image tag with the digest printed by the build (the `ghcr.io/...@sha256:...` form). Commit and push the Compose and Dockerfile changes to `inspect-wrapper` before launching Hawk. The existing `v1` image is unaffected.
 
 With Hawk 3.x configured and authenticated for your deployment:
 

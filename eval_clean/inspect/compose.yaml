@@ -1,5 +1,7 @@
 services:
   default:
+    image: ghcr.io/xantheocracy/scicode-sandbox:verified-v1
+    platform: linux/amd64
     build:
       context: ..
       dockerfile: inspect/Dockerfile
