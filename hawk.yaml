@@ -1,0 +1,29 @@
+name: scicode-verified-luna-smoke
+
+# Publish the inspect-wrapper branch before launching on the cluster.
+# For reproducible runs, replace inspect-wrapper with its published commit SHA.
+tasks:
+  - package: git+https://github.com/flyingwagner/scicode-verified.git@inspect-wrapper
+    name: scicode_inspect
+    items:
+      - name: scicode_verified
+        args:
+          provide_scientific_background: true
+          download_targets: true
+          grading_environments: both
+          timeout: 1800
+
+models:
+  - package: openai
+    name: openai
+    items:
+      - name: gpt-6-luna
+
+limit: 1
+epochs: 1
+retry_attempts: 0
+max_retries: 3
+
+runner:
+  cpu: "2"
+  memory: 4Gi

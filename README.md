@@ -120,6 +120,66 @@ saved under `eval_clean/ds_runs/`. OpenRouter models work with the same entry po
 For generation-only runs, cached re-grading, provider configuration, and original-versus-
 verified comparisons, see [`eval_clean/README.md`](eval_clean/README.md).
 
+### Run with Inspect
+
+The [Inspect wrapper](scicode_inspect.py) uses the same cumulative prompts, code extraction, reference steps, and corrected targets as the existing runner. Install its dependency in your environment:
+
+```bash
+python -m pip install -r requirements-inspect.txt
+```
+
+Download `scicode_verified/test_data_cleaned.h5` as described above, start Docker, and run from this repository root:
+
+```bash
+inspect eval scicode_inspect.py --model openai/gpt-5.5 \
+  --sample-id 58 --log-dir logs/inspect-smoke
+```
+
+Omit `--sample-id 58` to run all 64 problems. Inspect handles provider credentials, model settings, concurrency, and `.eval` logs. Its first scoring run builds a Docker image containing two scientific Python environments. Generated code runs inside the container, with networking disabled. Each scored step passes if it passes in either environment; a main problem passes only if every scored step passes. Logs report `problem_accuracy` and `subproblem_accuracy` as fractions between 0 and 1 and retain the generated step code and per-environment grading details.
+
+The task defaults to providing scientific background. Run the other condition separately:
+
+```bash
+inspect eval scicode_inspect.py --model openai/gpt-5.5 \
+  -T provide_scientific_background=false
+```
+
+| Task parameter | Default | Meaning |
+|---|---|---|
+| `provide_scientific_background` | `true` | Include the expert-written background. |
+| `timeout` | `1800` | Execution timeout per step and environment in seconds. |
+| `grading_environments` | `both` | Use `both`, `2024`, or `2025`. |
+| `full_envs` | `false` | Continue grading after the first passing environment. |
+| `targets_path` | `scicode_verified/test_data_cleaned.h5` | Override the local HDF5 path; the manifest checksum is still required. |
+| `generate_only` | `false` | Generate without the HDF5 or Docker. |
+| `download_targets` | `false` | Download missing targets from a pinned Hugging Face revision into `~/.cache/scicode_verified`, with SHA256 and manifest verification. |
+
+Generate first and score the saved Inspect log later. This path requires the corrected targets and Docker during generation so that the log retains the target file and sandbox configuration:
+
+```bash
+inspect eval scicode_inspect.py --model openai/gpt-5.5 \
+  --no-score --log-dir logs/inspect-generation
+inspect score logs/inspect-generation/<run>.eval
+```
+
+Use the `--no-score` path for deferred grading. The `generate_only` option is useful when targets and Docker are unavailable; its logs retain code for custom re-scoring, but do not contain target-file or sandbox setup.
+
+The Docker environments pin NumPy/SciPy to `1.26.4`/`1.13.1` and `2.4.2`/`1.17.1`. Both include matplotlib, h5py, and sympy. These environments implement the two-version OR protocol but do not reproduce every package or installation omission in the paper's historical machines.
+
+### Run on Hawk
+
+[`hawk.yaml`](hawk.yaml) configures one main-problem sample (`limit: 1`), one epoch, the `openai/gpt-6-luna` model, and grading in both environments. The first sample is problem 5, which includes several model calls, one per scored subproblem. The runner downloads and verifies the corrected targets automatically. No checkpointing is enabled.
+
+Hawk installs the task from Git. Publish the `inspect-wrapper` branch containing these changes before launching, then replace the branch ref in `tasks[0].package` with that published commit SHA to pin the run. The repository now includes package metadata and an Inspect entry point for this installation.
+
+With Hawk 3.x configured and authenticated for your deployment:
+
+```bash
+hawk eval-set run hawk.yaml
+```
+
+This uses Hawk's managed model proxy. Availability of `gpt-6-luna` depends on your deployment. The config was validated with Hawk 3.6.0; no cluster run was submitted.
+
 ## Evaluation protocol
 
 | | Canonical setting |

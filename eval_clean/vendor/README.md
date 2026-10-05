@@ -23,6 +23,8 @@ exists and falls back to these copies otherwise; the grading subprocess prepends
 this directory to `sys.path`, so an installed `scicode` package (if any) takes
 precedence.
 
+The Inspect sandbox also includes `scicode/compare/cmp.py` and its package initializer from upstream SciCode commit `e3158ea011d4235245a547460d3688d7ccbf9900`, under the same Apache-2.0 license. The comparison module has MD5 `c64e699b4fc6d7ae822d8119934bb786`. Released test cases import `cmp_tuple_or_list` and `are_dicts_close` from this module.
+
 Note: the upstream `test_data.h5` (~1 GB, distributed separately by upstream,
 md5 `96d5d815aee54434deba01eb27646f22`) is **not** vendored. It is only needed to
 reproduce the paper's *before* (original-benchmark) measurements via

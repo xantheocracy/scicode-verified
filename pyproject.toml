@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scicode-verified"
+version = "0.1.0"
+description = "SciCode-Verified scientific code generation benchmark with an Inspect task"
+requires-python = ">=3.11"
+dependencies = ["inspect-ai>=0.3.264"]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "ruff"]
+
+[project.entry-points.inspect_ai]
+scicode_inspect = "scicode_inspect"
+
+[tool.setuptools]
+py-modules = ["scicode_inspect"]
+
+[tool.setuptools.packages.find]
+include = ["eval_clean", "eval_clean.vendor.scicode*", "scicode_verified"]
+namespaces = true
+
+[tool.setuptools.package-data]
+eval_clean = ["vendor/eval_data/*.txt", "vendor/LICENSE", "inspect/Dockerfile", "inspect/compose.yaml", ".dockerignore"]
+scicode_verified = ["problems_test.jsonl", "manifest.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
