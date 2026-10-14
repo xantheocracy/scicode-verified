@@ -265,7 +265,7 @@ inspect eval scicode_inspect.py@scicode_verified \
   --max-tokens 20000 --sample-id 21
 ```
 
-Logs retain the full agent conversation and tool calls, including the submission. `scicode_react_submission` stores the final implementation mapping; `scicode_codes` stores ordered code for the existing grader. `scicode_react_run` records the shared budget, input/output usage, remaining tokens, submission status, and termination reason. Scoring metadata includes this run information and the usual per-environment grading diagnostics. Task version 2 and `solver_mode: react` identify the changed elicitation protocol; the default solver stays version 1.
+Logs retain the full agent conversation and tool calls, including the submission. `scicode_react_submission` stores the final implementation mapping; `scicode_codes` stores ordered code for the existing grader. `scicode_react_run` records the shared budget, input/output usage, remaining tokens, submission status, and termination reason. Scoring metadata includes this run information and the usual per-environment grading diagnostics. Task version 3 and `solver_mode: react` identify the changed elicitation protocol; the default solver stays version 1. Model-visible prompts and tool instructions use anonymous programming-task labels rather than benchmark names. Internal dataset, log, package, and hidden-grader identifiers are retained for execution and analysis; the agent sandbox contains only scientific Python dependencies, with no benchmark package or target files.
 
 #### Hawk setup
 
@@ -280,7 +280,7 @@ hawk eval-set run hawk-react-opus55-smoke.yaml
 hawk eval-set run hawk-react-opus55.yaml
 ```
 
-The configs reference `feature/scicode-verified-react`, use Opus 5.5 through the Anthropic OpenRouter provider, and retain provider-default reasoning effort. Pin the published task commit and image digest before a reproducible run. The smoke config selects problem 21; the full config selects all 64 released main problems. Neither run has been launched.
+The configs use Opus 5.5 through the Anthropic OpenRouter provider. The smoke config explicitly uses high reasoning effort; the full config retains provider-default effort. Pin the published task commit and image digest before a reproducible run. The smoke config selects problem 21; the full config selects all 64 released main problems. Neither run has been launched.
 
 #### Tests
 

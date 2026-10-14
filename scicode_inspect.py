@@ -364,7 +364,7 @@ def scicode_verified(
                 / ("react-compose.yaml" if solver_mode == "react" else "compose.yaml")
             ),
         ),
-        version=2 if solver_mode == "react" else 1,
+        version=3 if solver_mode == "react" else 1,
         metadata={
             "dataset_version": "v2",
             "grading_environments": grading_environments,

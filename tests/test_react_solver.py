@@ -98,6 +98,24 @@ def test_whole_problem_prompt_omits_hidden_content():
     assert "21.1" in prompt and "21.2" in prompt
     assert "HIDDEN" not in prompt and "OPTIONAL" not in prompt
     assert "OPTIONAL_MAIN_BACKGROUND" in agent.problem_prompt(problem(), True, {})
+    assert "scicode" not in prompt.lower()
+
+
+@pytest.mark.parametrize("background", [False, True])
+def test_all_released_problem_prompts_are_anonymous(background):
+    for sample in wrapper.get_dataset(require_targets=False):
+        provided = {
+            step["step_number"]: wrapper.extract_code(
+                (
+                    wrapper.VENDOR / "eval_data" / f"{step['step_number']}.txt"
+                ).read_text()
+            )
+            for step in sample.metadata["sub_steps"]
+            if step["step_number"] in wrapper.PROVIDED_STEPS
+        }
+        prompt = agent.problem_prompt(sample.metadata, background, provided)
+        assert "scicode" not in prompt.lower(), sample.id
+        assert "Programming problem" in prompt
 
 
 def test_budget_countdown_and_terminal_submission(tmp_path):

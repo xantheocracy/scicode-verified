@@ -29,18 +29,20 @@ def problem_prompt(
 ) -> str:
     """Present all task descriptions, never tests, targets, or reference solutions."""
     sections = [
-        f"SciCode-Verified problem {problem['problem_id']}",
-        problem.get("problem_description_main", ""),
+        f"Programming problem {problem['problem_id']}",
+        problem.get("problem_description_main") or "",
         "Required dependencies:\n" + problem["required_dependencies"],
     ]
     if background:
-        sections.append(problem.get("problem_background_main", ""))
+        sections.append(problem.get("problem_background_main") or "")
     for step in problem["sub_steps"]:
         sid = step["step_number"]
-        section = [f"Subproblem {sid}", step["step_description_prompt"]]
+        section = [f"Subproblem {sid}", step.get("step_description_prompt") or ""]
         if background:
-            section.append(step.get("step_background", ""))
-        section.extend([step["function_header"], step.get("return_line", "")])
+            section.append(step.get("step_background") or "")
+        section.extend(
+            [step.get("function_header") or "", step.get("return_line") or ""]
+        )
         if sid in provided:
             section.append(
                 "Fixed author-provided implementation:\n```python\n"
@@ -209,7 +211,7 @@ def solve_scicode_react(
                 )
             ],
             limits=[budget, inputs],
-            name=f"SciCode-Verified problem {state.sample_id}",
+            name=f"Programming problem {state.sample_id}",
         )
         state.messages = agent_state.messages
         state.output = agent_state.output
