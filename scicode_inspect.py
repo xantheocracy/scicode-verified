@@ -18,6 +18,7 @@ from inspect_ai.solver import Generate, Solver, TaskState, solver
 from inspect_ai.util import download, sandbox
 
 from eval_clean.run_deepseek_eval import build_prompt, extract_code
+from scicode_react import RUN_KEY, SUBMISSION_KEY, solve_scicode_react
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "scicode_verified"
@@ -197,8 +198,10 @@ def grading_script(problem: dict[str, Any], index: int, codes: list[str]) -> str
         problem["required_dependencies"],
         *codes[: index + 1],
         "from scicode.parse.parse import process_hdf5_to_tuple",
-        f"targets = process_hdf5_to_tuple({step['step_number']!r}, "
-        f"{len(step['test_cases'])}, 'test_data_cleaned.h5')",
+        (
+            f"targets = process_hdf5_to_tuple({step['step_number']!r}, "
+            f"{len(step['test_cases'])}, 'test_data_cleaned.h5')"
+        ),
     ]
     for test_index, test_case in enumerate(step["test_cases"]):
         sections.extend([f"target = targets[{test_index}]", test_case])
@@ -207,7 +210,10 @@ def grading_script(problem: dict[str, Any], index: int, codes: list[str]) -> str
 
 @scorer(metrics=[problem_accuracy(), subproblem_accuracy()])
 def verify_scicode(
-    timeout: int = 1800, grading_environments: str = "both", full_envs: bool = False
+    timeout: int = 1800,
+    grading_environments: str = "both",
+    full_envs: bool = False,
+    sandbox_name: str | None = None,
 ) -> Scorer:
     """Accept a step if its tests pass in any selected sandbox interpreter."""
     if grading_environments not in {"both", *GRADING_ENVS}:
@@ -219,6 +225,17 @@ def verify_scicode(
     )
 
     async def score(state: TaskState, target: Target) -> Score:
+        agent_run = state.store.get(RUN_KEY)
+        if agent_run is not None and state.store.get(SUBMISSION_KEY) is None:
+            return Score(
+                value={
+                    step["step_number"]: 0.0
+                    for step in state.metadata["sub_steps"]
+                    if step["step_number"] not in PROVIDED_STEPS
+                },
+                explanation="No valid main-problem submission was made.",
+                metadata={"per_environment": {}, "agent_run": agent_run},
+            )
         codes = state.store.get("scicode_codes")
         if codes is None or len(codes) != len(state.metadata["sub_steps"]):
             raise ValueError("Missing completed SciCode step code in the sample store.")
@@ -232,14 +249,16 @@ def verify_scicode(
             per_env = {}
             for label, python in selected.items():
                 # Check benchmark resources separately so instrument errors raise.
-                check = await sandbox().exec(
+                check = await sandbox(sandbox_name).exec(
                     [
                         python,
                         "-c",
-                        "from scicode.compare.cmp import cmp_tuple_or_list, are_dicts_close; "
-                        "from scicode.parse.parse import process_hdf5_to_tuple; "
-                        f"process_hdf5_to_tuple({step_id!r}, {len(step['test_cases'])}, "
-                        "'test_data_cleaned.h5')",
+                        (
+                            "from scicode.compare.cmp import cmp_tuple_or_list, are_dicts_close; "
+                            "from scicode.parse.parse import process_hdf5_to_tuple; "
+                            f"process_hdf5_to_tuple({step_id!r}, {len(step['test_cases'])}, "
+                            "'test_data_cleaned.h5')"
+                        ),
                     ],
                     env=THREAD_ENV,
                     timeout=60,
@@ -249,7 +268,7 @@ def verify_scicode(
                         f"Grading setup failed in {label}: {check.stderr}"
                     )
                 try:
-                    result = await sandbox().exec(
+                    result = await sandbox(sandbox_name).exec(
                         [python, "-c", code],
                         env=THREAD_ENV,
                         timeout=timeout,
@@ -268,7 +287,10 @@ def verify_scicode(
                 any(result["passed"] for result in per_env.values())
             )
             details[step_id] = per_env
-        return Score(value=values, metadata={"per_environment": details})
+        metadata = {"per_environment": details}
+        if agent_run is not None:
+            metadata["agent_run"] = agent_run
+        return Score(value=values, metadata=metadata)
 
     return score
 
@@ -282,6 +304,9 @@ def scicode_verified(
     targets_path: str | None = None,
     generate_only: bool = False,
     download_targets: bool = False,
+    solver_mode: str = "single_call",
+    tokens_per_subproblem: int = 20_000,
+    python_timeout: int = 60,
 ) -> Task:
     """Run SciCode-Verified v2 using Inspect's models, logging, and sandboxes.
 
@@ -291,27 +316,61 @@ def scicode_verified(
         grading_environments: Grade in 'both', '2024', or '2025' environments.
         full_envs: Run all selected environments even after a passing result.
         targets_path: Override the local corrected HDF5 path; its hash is verified.
-        generate_only: Generate without requiring targets or starting Docker.
+        generate_only: Generate without targets or grading. ReAct still needs Docker for Python.
         download_targets: Download pinned targets into the local cache if absent.
+        solver_mode: 'single_call' or whole-problem 'react'.
+        tokens_per_subproblem: Shared ReAct output budget multiplier per scored step.
+        python_timeout: Maximum time for an agent Python self-check.
     """
     if timeout <= 0:
         raise ValueError("timeout must be positive.")
+    if solver_mode not in {"single_call", "react"}:
+        raise ValueError("solver_mode must be 'single_call' or 'react'.")
+    if tokens_per_subproblem <= 0 or python_timeout <= 0:
+        raise ValueError("tokens_per_subproblem and python_timeout must be positive.")
+    dataset = get_dataset(
+        targets_path,
+        require_targets=not generate_only,
+        download_targets=download_targets,
+    )
+    if solver_mode == "react":
+        for sample in dataset:
+            sample.files = {
+                f"grader:{name}": path for name, path in (sample.files or {}).items()
+            }
     return Task(
-        dataset=get_dataset(
-            targets_path,
-            require_targets=not generate_only,
-            download_targets=download_targets,
-        ),
-        solver=solve_scicode(provide_scientific_background),
+        dataset=dataset,
+        solver=solve_scicode_react(
+            provide_scientific_background, tokens_per_subproblem, python_timeout
+        )
+        if solver_mode == "react"
+        else solve_scicode(provide_scientific_background),
         scorer=None
         if generate_only
-        else verify_scicode(timeout, grading_environments, full_envs),
+        else verify_scicode(
+            timeout,
+            grading_environments,
+            full_envs,
+            sandbox_name="grader" if solver_mode == "react" else None,
+        ),
         sandbox=None
-        if generate_only
-        else ("docker", str(ROOT / "eval_clean" / "inspect" / "compose.yaml")),
-        version=1,
+        if generate_only and solver_mode == "single_call"
+        else (
+            "docker",
+            str(
+                ROOT
+                / "eval_clean"
+                / "inspect"
+                / ("compose.react.yaml" if solver_mode == "react" else "compose.yaml")
+            ),
+        ),
+        version=2 if solver_mode == "react" else 1,
         metadata={
             "dataset_version": "v2",
             "grading_environments": grading_environments,
+            "solver_mode": solver_mode,
+            "tokens_per_subproblem": tokens_per_subproblem
+            if solver_mode == "react"
+            else None,
         },
     )

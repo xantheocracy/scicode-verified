@@ -246,3 +246,46 @@ use this release, please cite both the original SciCode benchmark and SciCode-Ve
   url           = {https://arxiv.org/abs/2608.04975}
 }
 ```
+
+### Whole-problem ReAct solver
+
+Use `solver_mode=react` to solve all subproblems in one conversation with Inspect's built-in ReAct agent. The current single-call solver remains the default. The model may revise any generated implementation before its first valid submission, which ends the whole main-problem attempt immediately. There are no further submissions or official test feedback during solving.
+
+The shared generated-token budget is `tokens_per_subproblem × scored subproblem count`, defaulting to 20,000 per scored step. It includes reasoning, tool arguments, and submitted code; input tokens are tracked separately. Author-provided implementations are fixed and do not add to the budget. Every turn includes a reminder to submit before exhausting the budget. The model may finish early without using the full allowance. A main problem that ends without a valid submission scores zero on every scored step; draft code is not recovered.
+
+The `submit` tool takes `solutions`, a mapping from every model-generated subproblem ID to a nonempty Python implementation. It excludes author-provided steps. Invalid mappings return a tool error and may be corrected while tokens remain. The shared budget does not reset between turns. Each model call is capped by the remaining allowance and by `--max-tokens` if configured; otherwise its ceiling defaults to `tokens_per_subproblem`.
+
+Python self-checks run in a separate, network-disabled agent container with the scientific library versions used by the 2025 grader. Hidden tests, HDF5 targets, and grading helpers are unavailable there. The grader container retains both the 2024 and 2025 environments, and a subproblem still passes if either environment passes. No container volume or network connects the two services. `python_timeout` defaults to 60 seconds per self-check. `generate_only=True` skips targets and grading, but ReAct still starts Docker because its Python tool needs a sandbox.
+
+```bash
+inspect eval scicode_inspect.py@scicode_verified \
+  --model openrouter/anthropic/claude-opus-5.5 \
+  -T solver_mode=react -T tokens_per_subproblem=20000 \
+  -T provide_scientific_background=false -T download_targets=true \
+  --max-tokens 20000 --sample-id 21
+```
+
+Logs retain the full agent conversation and tool calls, including the submission. `scicode_react_submission` stores the final implementation mapping; `scicode_codes` stores ordered code for the existing grader. `scicode_react_run` records the shared budget, input/output usage, remaining tokens, submission status, and termination reason. Scoring metadata includes this run information and the usual per-environment grading diagnostics. Task version 2 and `solver_mode: react` identify the changed elicitation protocol; the default solver stays version 1.
+
+#### Hawk setup
+
+The new agent image was built and tested locally. Before a cluster run, publish the branch and the agent image; Hawk installs Git packages and pulls images rather than building this checkout. The existing grader image is reused.
+
+```bash
+docker compose -f eval_clean/inspect/compose.react.yaml build default
+docker push ghcr.io/xantheocracy/scicode-sandbox:verified-agent-v1
+
+hawk eval-set run hawk-react-opus55-smoke.yaml
+# After reviewing the smoke log:
+hawk eval-set run hawk-react-opus55.yaml
+```
+
+The configs reference `feature/scicode-verified-react`, use Opus 5.5 through the Anthropic OpenRouter provider, and retain provider-default reasoning effort. Pin the published task commit and image digest before a reproducible run. The smoke config selects problem 21; the full config selects all 64 released main problems. Neither run has been launched.
+
+#### Tests
+
+```bash
+python -m pytest tests/test_inspect_eval.py tests/test_react_solver.py -q
+# With both sandbox images available; uses mocked inference and synthetic targets:
+SCICODE_DOCKER_TESTS=1 python -m pytest tests/test_react_docker.py -q
+```

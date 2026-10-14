@@ -1,0 +1,16 @@
+services:
+  default:
+    image: ghcr.io/xantheocracy/scicode-sandbox:verified-agent-v1
+    platform: linux/amd64
+    build:
+      context: ..
+      dockerfile: inspect/Dockerfile.agent
+    init: true
+    network_mode: none
+    working_dir: /workspace
+  grader:
+    image: ghcr.io/xantheocracy/scicode-sandbox:verified-v1
+    platform: linux/amd64
+    init: true
+    network_mode: none
+    working_dir: /workspace
