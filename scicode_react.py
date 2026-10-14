@@ -32,11 +32,8 @@ def problem_prompt(
     """Present all task descriptions, never tests, targets, or reference solutions."""
     sections = [
         f"Programming problem {problem['problem_id']}",
-        problem.get("problem_description_main") or "",
         "Required dependencies:\n" + problem["required_dependencies"],
     ]
-    if background:
-        sections.append(problem.get("problem_background_main") or "")
     for step in problem["sub_steps"]:
         sid = step["step_number"]
         section = [f"Subproblem {sid}", step.get("step_description_prompt") or ""]

@@ -97,7 +97,11 @@ def test_whole_problem_prompt_omits_hidden_content():
     prompt = agent.problem_prompt(problem(), False, {})
     assert "21.1" in prompt and "21.2" in prompt
     assert "HIDDEN" not in prompt and "OPTIONAL" not in prompt
-    assert "OPTIONAL_MAIN_BACKGROUND" in agent.problem_prompt(problem(), True, {})
+    assert "Solve both functions." not in prompt
+    background_prompt = agent.problem_prompt(problem(), True, {})
+    assert "OPTIONAL_MAIN_BACKGROUND" not in background_prompt
+    assert "Solve both functions." not in background_prompt
+    assert "OPTIONAL_BACKGROUND_1" in background_prompt
     assert "scicode" not in prompt.lower()
 
 
