@@ -272,7 +272,7 @@ Logs retain the full agent conversation and tool calls, including the submission
 The new agent image was built and tested locally. Before a cluster run, publish the branch and the agent image; Hawk installs Git packages and pulls images rather than building this checkout. The existing grader image is reused.
 
 ```bash
-docker compose -f eval_clean/inspect/compose.react.yaml build default
+docker compose -f eval_clean/inspect/react-compose.yaml build default
 docker push ghcr.io/xantheocracy/scicode-sandbox:verified-agent-v1
 
 hawk eval-set run hawk-react-opus55-smoke.yaml

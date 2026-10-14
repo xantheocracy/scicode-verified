@@ -361,7 +361,7 @@ def scicode_verified(
                 ROOT
                 / "eval_clean"
                 / "inspect"
-                / ("compose.react.yaml" if solver_mode == "react" else "compose.yaml")
+                / ("react-compose.yaml" if solver_mode == "react" else "compose.yaml")
             ),
         ),
         version=2 if solver_mode == "react" else 1,

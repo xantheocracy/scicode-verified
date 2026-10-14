@@ -71,7 +71,7 @@ print('Agent isolation verified; Python self-checks work.')
         ),
         solver=solve_scicode_react(False),
         scorer=wrapper.verify_scicode(sandbox_name="grader"),
-        sandbox=("docker", str(wrapper.ROOT / "eval_clean/inspect/compose.react.yaml")),
+        sandbox=("docker", str(wrapper.ROOT / "eval_clean/inspect/react-compose.yaml")),
     )
     logs = eval(
         task,

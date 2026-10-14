@@ -1,5 +1,6 @@
 """Exercise the built-in ReAct loop without paid inference or hidden targets."""
 
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -229,10 +230,12 @@ def test_task_mode_and_resource_routing(monkeypatch):
     monkeypatch.setattr(wrapper, "get_dataset", lambda *a, **k: MemoryDataset([sample]))
     task = wrapper.scicode_verified(solver_mode="react")
     assert sample.files == {"grader:test_data_cleaned.h5": "target"}
-    assert "compose.react.yaml" in task.sandbox.config
+    assert "react-compose.yaml" in task.sandbox.config
+    # Hawk detects Compose files by suffix, before converting them to Helm values.
+    assert Path(task.sandbox.config).name.endswith(("compose.yaml", "compose.yml"))
     assert task.metadata["solver_mode"] == "react"
     assert (
-        "compose.react.yaml"
+        "react-compose.yaml"
         in wrapper.scicode_verified(
             solver_mode="react", generate_only=True
         ).sandbox.config
