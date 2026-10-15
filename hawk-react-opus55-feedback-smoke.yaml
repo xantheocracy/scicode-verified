@@ -1,0 +1,40 @@
+# Trial grading returns only one pass/fail bit per scored subproblem.
+# The task package is pinned to the score-feedback implementation commit.
+name: scicode-verified-react-opus55-feedback-smoke
+packages:
+  - semver==3.0.4
+  - inspect-ai==0.3.277
+tasks:
+  - package: "scicode-verified @ git+https://github.com/xantheocracy/scicode-verified.git@aeb85ddf6fb7f3337a709649cbe893ce1fec9db1"
+    name: scicode_inspect
+    items:
+      - name: scicode_verified
+        sample_ids: ["13", "17", "21", "22", "25", "28", "32", "35", "39", "48", "54", "55", "57", "60", "69", "73", "76", "80"]
+        args:
+          solver_mode: react
+          score_feedback: true
+          tokens_per_subproblem: 20000
+          python_timeout: 60
+          provide_scientific_background: false
+          download_targets: true
+          timeout: 1800
+          grading_environments: both
+models:
+  - package: openai
+    name: openrouter
+    items:
+      - name: openrouter/anthropic/claude-opus-5.5
+        args:
+          config:
+            max_tokens: 20000
+            extra_body:
+              reasoning:
+                effort: high
+              provider:
+                only: [anthropic]
+                allow_fallbacks: false
+epochs: 1
+retry_attempts: 0
+runner:
+  cpu: "2"
+  memory: 4Gi
