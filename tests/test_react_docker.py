@@ -10,6 +10,7 @@ from inspect_ai.model import ModelOutput, ModelUsage, get_model
 from inspect_ai.tool import ToolCall
 
 import scicode_inspect as wrapper
+import scicode_react as agent
 from scicode_react import solve_scicode_react
 
 
@@ -91,3 +92,69 @@ print('Agent isolation verified; Python self-checks work.')
     for result in score.metadata["per_environment"].values():
         assert not result["2024"]["passed"]
         assert result["2025"]["passed"]
+
+
+@pytest.mark.skipif(
+    os.environ.get("SCICODE_DOCKER_TESTS") != "1",
+    reason="Set SCICODE_DOCKER_TESTS=1 with sandbox images built.",
+)
+def test_trial_grading_uses_isolated_grader_and_final_submission(tmp_path):
+    target = tmp_path / "targets.h5"
+    with h5py.File(target, "w") as file:
+        file.create_dataset("21.1/test1/var1", data=1)
+        file.create_dataset("21.2/test1/var1", data=2)
+    problem = {
+        "problem_id": "21",
+        "required_dependencies": "",
+        "sub_steps": [
+            {
+                "step_number": f"21.{i}",
+                "step_description_prompt": f"Implement f{i}.",
+                "function_header": f"def f{i}():",
+                "return_line": "return result",
+                "test_cases": [f"assert f{i}() == target"],
+            }
+            for i in [1, 2]
+        ],
+    }
+    first = {"21.1": "def f1(): return 0", "21.2": "def f2(): return 2"}
+    revised = {"21.1": "def f1(): return 1", "21.2": "def f2(): return 2"}
+    outputs = []
+    for call in [
+        ToolCall(id="trial", function="trial_grade", arguments={"solutions": first}),
+        ToolCall(id="final", function="submit", arguments={"solutions": revised}),
+    ]:
+        output = ModelOutput.from_content("mockllm/model", "")
+        output.choices[0].message.tool_calls = [call]
+        output.choices[0].stop_reason = "tool_calls"
+        output.usage = ModelUsage(input_tokens=1000, output_tokens=5, total_tokens=1005)
+        outputs.append(output)
+    task = Task(
+        dataset=MemoryDataset(
+            [
+                Sample(
+                    id="21",
+                    input="21",
+                    metadata=problem,
+                    files={"grader:test_data_cleaned.h5": str(target)},
+                )
+            ]
+        ),
+        solver=solve_scicode_react(False, score_feedback=True),
+        scorer=wrapper.verify_scicode(sandbox_name="grader"),
+        sandbox=("docker", str(wrapper.ROOT / "eval_clean/inspect/react-compose.yaml")),
+    )
+    logs = eval(
+        task,
+        model=get_model("mockllm/model", custom_outputs=outputs, memoize=False),
+        log_dir=str(tmp_path / "logs"),
+        display="none",
+    )
+    assert logs[0].status == "success", logs[0].error
+    sample = logs[0].samples[0]
+    observations = [m.text for m in sample.messages if m.role == "tool"]
+    assert '{"21.1": 0, "21.2": 1}' in observations
+    assert not any("AssertionError" in text for text in observations)
+    assert sample.store[agent.RUN_KEY]["feedback_attempts"] == 1
+    score = next(iter(sample.scores.values()))
+    assert score.value == {"21.1": 1.0, "21.2": 1.0}

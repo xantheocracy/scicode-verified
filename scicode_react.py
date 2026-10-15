@@ -57,8 +57,11 @@ def solve_scicode_react(
     provide_scientific_background: bool = True,
     tokens_per_subproblem: int = 20_000,
     python_timeout: int = 60,
+    score_feedback: bool = False,
+    grading_timeout: int = 1800,
+    grading_environments: str = "both",
 ) -> Solver:
-    """One conversation and one terminal submission under a shared output budget."""
+    """One conversation and terminal submission, optionally with bitmap feedback."""
     if tokens_per_subproblem <= 0 or python_timeout <= 0:
         raise ValueError("tokens_per_subproblem and python_timeout must be positive.")
 
@@ -82,7 +85,18 @@ def solve_scicode_react(
         budget = token_limit(total, type="output")
         inputs = token_limit(None, type="input")
         submission: dict[str, str] | None = None
+        feedback_attempts = 0
         state.store.set(SUBMISSION_KEY, None)
+
+        def submitted_codes(solutions: dict[str, str]) -> dict[str, str]:
+            if set(solutions) != set(step_ids):
+                raise ToolError(
+                    f"Include all and only these subproblem IDs: {step_ids}"
+                )
+            code = {sid: extract_code(solutions[sid]).strip() for sid in step_ids}
+            if any(not value for value in code.values()):
+                raise ToolError("Every subproblem requires a nonempty implementation.")
+            return code
 
         @tool
         def python_checks() -> Tool:
@@ -116,6 +130,40 @@ def solve_scicode_react(
             return execute
 
         @tool
+        def trial_grade() -> Tool:
+            async def execute(solutions: dict[str, str]) -> str:
+                """Grade a complete draft and return one pass/fail bit per subproblem.
+
+                This does not end the attempt. You may revise and grade another draft.
+                No test cases, targets, tracebacks, or per-environment results are shown.
+
+                Args:
+                    solutions: All model-generated subproblem IDs mapped to Python
+                        implementations, without dependency imports or tests.
+                """
+                nonlocal feedback_attempts
+                if submission is not None:
+                    return "Attempt complete. No further grading is allowed."
+                code = submitted_codes(solutions)
+                from scicode_inspect import grade_codes
+
+                ordered = [
+                    provided.get(step["step_number"], code.get(step["step_number"], ""))
+                    for step in steps
+                ]
+                values, _ = await grade_codes(
+                    state.metadata,
+                    ordered,
+                    grading_timeout,
+                    grading_environments,
+                    sandbox_name="grader",
+                )
+                feedback_attempts += 1
+                return json.dumps({sid: int(values[sid]) for sid in step_ids})
+
+            return execute
+
+        @tool
         def submit_solution() -> Tool:
             async def execute(solutions: dict[str, str]) -> str:
                 """Submit the complete main-problem solution and END the attempt.
@@ -130,15 +178,7 @@ def solve_scicode_react(
                 nonlocal submission
                 if submission is not None:
                     return json.dumps(submission)
-                if set(solutions) != set(step_ids):
-                    raise ToolError(
-                        f"Include all and only these subproblem IDs: {step_ids}"
-                    )
-                code = {sid: extract_code(solutions[sid]).strip() for sid in step_ids}
-                if any(not value for value in code.values()):
-                    raise ToolError(
-                        "Every subproblem requires a nonempty implementation."
-                    )
+                code = submitted_codes(solutions)
                 submission = code
                 state.store.set(SUBMISSION_KEY, code)
                 return json.dumps(code)
@@ -174,14 +214,20 @@ def solve_scicode_react(
                 return False
             return countdown(int(budget.remaining or 0), total)
 
+        feedback_instructions = (
+            "Hidden tests and targets are unavailable. You may use trial_grade to receive "
+            "one official pass/fail bit per scored subproblem and revise before final submission. "
+            if score_feedback
+            else "Hidden tests and targets are unavailable, and you receive no official grading feedback. "
+        )
         agent = react(
             prompt=AgentPrompt(
                 instructions=(
                     "Solve every model-generated subproblem in this main problem together. "
                     "You may work in any order and revise any implementation before submitting. "
                     "Author-provided implementations are fixed. Python is available for your own checks. "
-                    "Hidden tests and targets are unavailable, and you receive no official grading feedback. "
-                    "Use the available budget to develop and verify a well-supported solution. "
+                    + feedback_instructions
+                    + "Use the available budget to develop and verify a well-supported solution. "
                     "Take advantage of multiple turns: reason through the requirements, implement, "
                     "run self-written tests, inspect the results, and revise when needed. "
                     "Check mathematical assumptions, units, boundary cases, and dependencies between subproblems. "
@@ -198,7 +244,12 @@ def solve_scicode_react(
                 ),
                 handoff_prompt=None,
             ),
-            tools=[ToolDef(python_checks(), name="python", parallel=False)],
+            tools=[ToolDef(python_checks(), name="python", parallel=False)]
+            + (
+                [ToolDef(trial_grade(), name="trial_grade", parallel=False)]
+                if score_feedback
+                else []
+            ),
             submit=AgentSubmit(
                 tool=ToolDef(
                     submit_solution(), name="submit", parallel=False, max_output=0
@@ -240,6 +291,8 @@ def solve_scicode_react(
                 "token_budget": total,
                 "tokens_per_subproblem": tokens_per_subproblem,
                 "scored_subproblems": len(step_ids),
+                "score_feedback": score_feedback,
+                "feedback_attempts": feedback_attempts,
                 "input_tokens": int(inputs.usage),
                 "output_tokens": int(budget.usage),
                 "remaining_tokens": max(0, int(budget.remaining or 0)),

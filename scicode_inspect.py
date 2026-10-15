@@ -208,6 +208,71 @@ def grading_script(problem: dict[str, Any], index: int, codes: list[str]) -> str
     return "\n\n".join(sections)
 
 
+async def grade_codes(
+    problem: dict[str, Any],
+    codes: list[str],
+    timeout: int = 1800,
+    grading_environments: str = "both",
+    full_envs: bool = False,
+    sandbox_name: str | None = None,
+) -> tuple[dict[str, float], dict[str, Any]]:
+    """Grade cumulative code in the isolated grader, returning scores and diagnostics."""
+    if grading_environments not in {"both", *GRADING_ENVS}:
+        raise ValueError("grading_environments must be 'both', '2024', or '2025'.")
+    if len(codes) != len(problem["sub_steps"]):
+        raise ValueError("Missing completed SciCode step code.")
+    selected = (
+        GRADING_ENVS
+        if grading_environments == "both"
+        else {grading_environments: GRADING_ENVS[grading_environments]}
+    )
+    values: dict[str, float] = {}
+    details: dict[str, Any] = {}
+    for index, step in enumerate(problem["sub_steps"]):
+        step_id = step["step_number"]
+        if step_id in PROVIDED_STEPS:
+            continue
+        code = grading_script(problem, index, codes)
+        per_env = {}
+        for label, python in selected.items():
+            # Check benchmark resources separately so instrument errors raise.
+            check = await sandbox(sandbox_name).exec(
+                [
+                    python,
+                    "-c",
+                    (
+                        "from scicode.compare.cmp import cmp_tuple_or_list, are_dicts_close; "
+                        "from scicode.parse.parse import process_hdf5_to_tuple; "
+                        f"process_hdf5_to_tuple({step_id!r}, {len(step['test_cases'])}, "
+                        "'test_data_cleaned.h5')"
+                    ),
+                ],
+                env=THREAD_ENV,
+                timeout=60,
+            )
+            if not check.success:
+                raise RuntimeError(f"Grading setup failed in {label}: {check.stderr}")
+            try:
+                result = await sandbox(sandbox_name).exec(
+                    [python, "-c", code],
+                    env=THREAD_ENV,
+                    timeout=timeout,
+                    timeout_retry=False,
+                )
+                per_env[label] = {
+                    "passed": result.success,
+                    "stdout": result.stdout,
+                    "stderr": result.stderr,
+                }
+            except TimeoutError:
+                per_env[label] = {"passed": False, "stderr": "Execution timed out."}
+            if per_env[label]["passed"] and not full_envs:
+                break
+        values[step_id] = float(any(result["passed"] for result in per_env.values()))
+        details[step_id] = per_env
+    return values, details
+
+
 @scorer(metrics=[problem_accuracy(), subproblem_accuracy()])
 def verify_scicode(
     timeout: int = 1800,
@@ -218,11 +283,6 @@ def verify_scicode(
     """Accept a step if its tests pass in any selected sandbox interpreter."""
     if grading_environments not in {"both", *GRADING_ENVS}:
         raise ValueError("grading_environments must be 'both', '2024', or '2025'.")
-    selected = (
-        GRADING_ENVS
-        if grading_environments == "both"
-        else {grading_environments: GRADING_ENVS[grading_environments]}
-    )
 
     async def score(state: TaskState, target: Target) -> Score:
         agent_run = state.store.get(RUN_KEY)
@@ -239,54 +299,14 @@ def verify_scicode(
         codes = state.store.get("scicode_codes")
         if codes is None or len(codes) != len(state.metadata["sub_steps"]):
             raise ValueError("Missing completed SciCode step code in the sample store.")
-        values: dict[str, float] = {}
-        details: dict[str, Any] = {}
-        for index, step in enumerate(state.metadata["sub_steps"]):
-            step_id = step["step_number"]
-            if step_id in PROVIDED_STEPS:
-                continue
-            code = grading_script(state.metadata, index, codes)
-            per_env = {}
-            for label, python in selected.items():
-                # Check benchmark resources separately so instrument errors raise.
-                check = await sandbox(sandbox_name).exec(
-                    [
-                        python,
-                        "-c",
-                        (
-                            "from scicode.compare.cmp import cmp_tuple_or_list, are_dicts_close; "
-                            "from scicode.parse.parse import process_hdf5_to_tuple; "
-                            f"process_hdf5_to_tuple({step_id!r}, {len(step['test_cases'])}, "
-                            "'test_data_cleaned.h5')"
-                        ),
-                    ],
-                    env=THREAD_ENV,
-                    timeout=60,
-                )
-                if not check.success:
-                    raise RuntimeError(
-                        f"Grading setup failed in {label}: {check.stderr}"
-                    )
-                try:
-                    result = await sandbox(sandbox_name).exec(
-                        [python, "-c", code],
-                        env=THREAD_ENV,
-                        timeout=timeout,
-                        timeout_retry=False,
-                    )
-                    per_env[label] = {
-                        "passed": result.success,
-                        "stdout": result.stdout,
-                        "stderr": result.stderr,
-                    }
-                except TimeoutError:
-                    per_env[label] = {"passed": False, "stderr": "Execution timed out."}
-                if per_env[label]["passed"] and not full_envs:
-                    break
-            values[step_id] = float(
-                any(result["passed"] for result in per_env.values())
-            )
-            details[step_id] = per_env
+        values, details = await grade_codes(
+            state.metadata,
+            codes,
+            timeout,
+            grading_environments,
+            full_envs,
+            sandbox_name,
+        )
         metadata = {"per_environment": details}
         if agent_run is not None:
             metadata["agent_run"] = agent_run
@@ -307,6 +327,7 @@ def scicode_verified(
     solver_mode: str = "single_call",
     tokens_per_subproblem: int = 20_000,
     python_timeout: int = 60,
+    score_feedback: bool = False,
 ) -> Task:
     """Run SciCode-Verified v2 using Inspect's models, logging, and sandboxes.
 
@@ -321,6 +342,8 @@ def scicode_verified(
         solver_mode: 'single_call' or whole-problem 'react'.
         tokens_per_subproblem: Shared ReAct output budget multiplier per scored step.
         python_timeout: Maximum time for an agent Python self-check.
+        score_feedback: Let the ReAct agent trial-grade full solutions and see
+            one pass/fail bit per scored subproblem before final submission.
     """
     if timeout <= 0:
         raise ValueError("timeout must be positive.")
@@ -328,6 +351,10 @@ def scicode_verified(
         raise ValueError("solver_mode must be 'single_call' or 'react'.")
     if tokens_per_subproblem <= 0 or python_timeout <= 0:
         raise ValueError("tokens_per_subproblem and python_timeout must be positive.")
+    if score_feedback and solver_mode != "react":
+        raise ValueError("score_feedback requires solver_mode='react'.")
+    if score_feedback and generate_only:
+        raise ValueError("score_feedback requires grading targets.")
     dataset = get_dataset(
         targets_path,
         require_targets=not generate_only,
@@ -341,7 +368,12 @@ def scicode_verified(
     return Task(
         dataset=dataset,
         solver=solve_scicode_react(
-            provide_scientific_background, tokens_per_subproblem, python_timeout
+            provide_scientific_background,
+            tokens_per_subproblem,
+            python_timeout,
+            score_feedback,
+            timeout,
+            grading_environments,
         )
         if solver_mode == "react"
         else solve_scicode(provide_scientific_background),
@@ -364,7 +396,7 @@ def scicode_verified(
                 / ("react-compose.yaml" if solver_mode == "react" else "compose.yaml")
             ),
         ),
-        version=4 if solver_mode == "react" else 1,
+        version=(5 if score_feedback else 4) if solver_mode == "react" else 1,
         metadata={
             "dataset_version": "v2",
             "grading_environments": grading_environments,
@@ -372,5 +404,6 @@ def scicode_verified(
             "tokens_per_subproblem": tokens_per_subproblem
             if solver_mode == "react"
             else None,
+            "score_feedback": score_feedback,
         },
     )

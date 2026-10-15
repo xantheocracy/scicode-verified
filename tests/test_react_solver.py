@@ -66,7 +66,13 @@ def submit(solutions=None):
 
 
 def run_mock(
-    tmp_path, outputs, multiplier=10, scorer=None, metadata=None, max_tokens=None
+    tmp_path,
+    outputs,
+    multiplier=10,
+    scorer=None,
+    metadata=None,
+    max_tokens=None,
+    score_feedback=False,
 ):
     model = get_model(
         "mockllm/model",
@@ -78,7 +84,9 @@ def run_mock(
         dataset=MemoryDataset(
             [Sample(id="21", input="21", metadata=metadata or problem())]
         ),
-        solver=agent.solve_scicode_react(False, multiplier),
+        solver=agent.solve_scicode_react(
+            False, multiplier, score_feedback=score_feedback
+        ),
         scorer=scorer,
     )
     environment = AsyncMock()
@@ -171,6 +179,54 @@ def test_invalid_submission_can_be_corrected(tmp_path):
     assert any(m.error for m in sample.messages if m.role == "tool")
 
 
+def test_trial_grading_returns_only_bitmap_and_allows_revision(tmp_path):
+    first = {"21.1": "def f1(): return 0", "21.2": "def f2(): return 2"}
+    second = {"21.1": "def f1(): return 1", "21.2": "def f2(): return 2"}
+    grade = AsyncMock(
+        side_effect=[
+            ({"21.1": 0.0, "21.2": 1.0}, {"secret": "hidden diagnostics"}),
+            ({"21.1": 1.0, "21.2": 1.0}, {"secret": "hidden diagnostics"}),
+        ]
+    )
+    with patch.object(wrapper, "grade_codes", grade):
+        sample, generate, _ = run_mock(
+            tmp_path,
+            [
+                output(
+                    [
+                        ToolCall(
+                            id="trial-1",
+                            function="trial_grade",
+                            arguments={"solutions": first},
+                        )
+                    ]
+                ),
+                output(
+                    [
+                        ToolCall(
+                            id="trial-2",
+                            function="trial_grade",
+                            arguments={"solutions": second},
+                        )
+                    ]
+                ),
+                output([submit(second)]),
+            ],
+            score_feedback=True,
+        )
+    assert generate.call_count == 3
+    assert grade.await_count == 2
+    assert all(
+        call.kwargs["sandbox_name"] == "grader" for call in grade.await_args_list
+    )
+    observations = [m.text for m in sample.messages if m.role == "tool"]
+    assert '{"21.1": 0, "21.2": 1}' in observations
+    assert '{"21.1": 1, "21.2": 1}' in observations
+    assert not any("hidden diagnostics" in text for text in observations)
+    assert sample.store[agent.SUBMISSION_KEY] == second
+    assert sample.store[agent.RUN_KEY]["feedback_attempts"] == 2
+
+
 def test_exhaustion_does_not_recover_drafts_or_grade_them(tmp_path):
     sample, generate, environment = run_mock(
         tmp_path,
@@ -256,6 +312,10 @@ def test_task_mode_and_resource_routing(monkeypatch):
     # Hawk detects Compose files by suffix, before converting them to Helm values.
     assert Path(task.sandbox.config).name.endswith(("compose.yaml", "compose.yml"))
     assert task.metadata["solver_mode"] == "react"
+    assert not task.metadata["score_feedback"]
+    feedback_task = wrapper.scicode_verified(solver_mode="react", score_feedback=True)
+    assert feedback_task.metadata["score_feedback"]
+    assert feedback_task.version == 5
     assert (
         "react-compose.yaml"
         in wrapper.scicode_verified(
@@ -270,7 +330,13 @@ def test_task_mode_and_resource_routing(monkeypatch):
 
 @pytest.mark.parametrize(
     "kwargs",
-    [{"solver_mode": "bad"}, {"tokens_per_subproblem": 0}, {"python_timeout": 0}],
+    [
+        {"solver_mode": "bad"},
+        {"tokens_per_subproblem": 0},
+        {"python_timeout": 0},
+        {"score_feedback": True},
+        {"score_feedback": True, "solver_mode": "react"},
+    ],
 )
 def test_invalid_options(kwargs):
     with pytest.raises(ValueError):
